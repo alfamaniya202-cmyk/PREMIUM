@@ -1,0 +1,56 @@
+{
+    "5996676608": {
+        "user_id": "5996676608",
+        "username": "@NWSxALFA",
+        "first_name": "𝕄𝔸ℚ𝕊𝕌𝔻𝕁𝕆ℕ ℂ𝕐𝔹𝔼ℝ",
+        "last_name": "",
+        "balance": 261,
+        "referrals_count": 0,
+        "referred_by": null,
+        "completed_earn_tasks": [
+            1,
+            2
+        ],
+        "confirmed_required_channels": [
+            "@NWS_ALFA_07"
+        ],
+        "bonus_date": "2026-07-04",
+        "language": "uz",
+        "join_date": "2026-07-04 00:32:44",
+        "last_active": "2026-07-04 01:26:22",
+        "used_promo": [],
+        "blocked": false,
+        "notifications": true,
+        "orders_count": 0,
+        "subscription_bonus": false,
+        "welcome_given": true
+    },
+    "8252359524": {
+        "user_id": "8252359524",
+        "username": "@Alfapremium_support",
+        "first_name": "LEVEL UP",
+        "last_name": "",
+        "balance": 0,
+        "referrals_count": 0,
+        "referred_by": null,
+        "completed_earn_tasks": [
+            1,
+            2
+        ],
+        "confirmed_required_channels": [
+            "@NWS_ALFA_07"
+        ],
+        "bonus_date": "2026-07-04",
+        "language": "uz",
+        "join_date": "2026-07-04 00:48:57",
+        "last_active": "2026-07-04 01:07:16",
+        "used_promo": [
+            "BONUS50"
+        ],
+        "blocked": false,
+        "notifications": true,
+        "orders_count": 3,
+        "subscription_bonus": false,
+        "welcome_given": true
+    }
+}

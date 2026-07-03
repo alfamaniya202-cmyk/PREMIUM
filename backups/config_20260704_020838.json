@@ -1,0 +1,68 @@
+{
+    "required_channels": [
+        {
+            "username": "@NWS_ALFA_07",
+            "title": "NWS ALFA 07",
+            "auto_remove_at": 0,
+            "confirmed_count": 2
+        }
+    ],
+    "earn_tasks": [
+        {
+            "id": 1,
+            "type": "channel",
+            "title": "Kanalga a'zo bo'ling va bonus oling",
+            "link": "https://t.me/rek1ama_uzs",
+            "reward": 100,
+            "penalty": 200
+        }
+    ],
+    "referral_bonus": 100,
+    "welcome_bonus": 100,
+    "subscribe_bonus": 100,
+    "daily_bonus_range": [
+        0,
+        100
+    ],
+    "min_topup": 1000,
+    "services": [
+        {
+            "id": 1,
+            "category": "Pubg UC",
+            "name": "60 UC",
+            "price": 13000
+        },
+        {
+            "id": 2,
+            "category": "Pubg UC",
+            "name": "120 UC",
+            "price": 26000
+        }
+    ],
+    "payment_cards": [
+        {
+            "id": 1,
+            "number": "9860176613040045",
+            "bank": "IPAK YULI BANK",
+            "holder": "Mahammadjonov Maqsudjon"
+        },
+        {
+            "id": 2,
+            "number": "4916990332108916",
+            "bank": "UZUM KARTA",
+            "holder": "Mahammadjonov Maqsudjon"
+        }
+    ],
+    "payment_channel_id": -1003789920434,
+    "broadcast_targets": [
+        {
+            "id": -1002049416927,
+            "title": "ALFA PREMIUM"
+        }
+    ],
+    "messages": {
+        "welcome": "👋 Xush kelibsiz!",
+        "not_subscribed": "⚠️ Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling.\n\n✅ Obuna bo'lgach «Tekshirish» ni bosing.",
+        "subscribe_bonus_text": "🎉 Obuna uchun bonus berildi!"
+    }
+}

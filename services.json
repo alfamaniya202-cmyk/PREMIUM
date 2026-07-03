@@ -1,0 +1,22 @@
+{
+    "uc": [
+        {
+            "name": "60 UC",
+            "amount": 60,
+            "price": 12000
+        },
+        {
+            "name": "120 UC + 25 UC",
+            "amount": 145,
+            "price": 24000
+        }
+    ],
+    "premium": [
+        {
+            "name": "Premium 1 oy",
+            "amount": 1,
+            "price": 60000
+        }
+    ],
+    "other": []
+}

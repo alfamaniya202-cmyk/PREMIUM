@@ -1,0 +1,39 @@
+[
+    {
+        "id": 1,
+        "kind": "topup",
+        "user_id": "8252359524",
+        "status": "completed",
+        "date": "2026-07-04T00:50:47.429913",
+        "amount": 1000,
+        "card_id": 1,
+        "receipt_file_id": "AgACAgIAAxkBAAKAd2pIEpf8Ol9Njxzd9hV3T7nWLAkvAAIVFmsbAYVBSiKhNndRbolAAQADAgADeAADPAQ",
+        "handled_by": "@NWSxALFA",
+        "approved_by": "@NWSxALFA",
+        "completed_date": "2026-07-04T00:51:06.271566"
+    },
+    {
+        "id": 2,
+        "kind": "topup",
+        "user_id": "8252359524",
+        "status": "completed",
+        "date": "2026-07-04T00:51:59.109756",
+        "amount": 100000,
+        "card_id": 1,
+        "receipt_file_id": "AgACAgIAAxkBAAKAd2pIEpf8Ol9Njxzd9hV3T7nWLAkvAAIVFmsbAYVBSiKhNndRbolAAQADAgADeAADPAQ",
+        "approved_by": "@NWSxALFA",
+        "completed_date": "2026-07-04T00:52:04.260148"
+    },
+    {
+        "id": 3,
+        "kind": "shop",
+        "user_id": "8252359524",
+        "status": "completed",
+        "date": "2026-07-04T00:53:13.138646",
+        "service_name": "60 UC",
+        "amount": 13000,
+        "game_id": "20419471",
+        "approved_by": 5996676608,
+        "approved_date": "2026-07-04T00:53:27.378628"
+    }
+]
