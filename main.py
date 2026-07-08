@@ -33,7 +33,7 @@ PORT = int(os.getenv("PORT", "8000"))
 if not TOKEN:
     raise RuntimeError("BOT_TOKEN topilmadi. Environment variable ga qo'ying.")
 
-bot = telebot.TeleBot(TOKEN, parse_mode="HTML", threaded=True, num_threads=8)
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML", threaded=True, num_threads=16)
 app = Flask(__name__)
 
 DATA_FILE = "users.json"
@@ -45,23 +45,23 @@ LOGS_FILE = "bot.log"
 BACKUP_DIR = "backups"
 
 # =====================================
-# STICKERS / ANIMATIONS (public sticker file_ids from Telegram's own sticker sets;
-# if any of these ever become invalid, sending is wrapped in try/except so nothing breaks)
+# STICKERS / ANIMATIONS
 # =====================================
 STICKERS = {
-    "welcome": "CAACAgIAAxkBAAEBTQFmS3example_welcome",  # falls back silently if invalid
+    "welcome": "CAACAgIAAxkBAAEBTQFmS3example_welcome",
     "success": "CAACAgIAAxkBAAEBTQJmS3example_success",
     "fail": "CAACAgIAAxkBAAEBTQNmS3example_fail",
     "money": "CAACAgIAAxkBAAEBTQRmS3example_money",
     "game_win": "CAACAgIAAxkBAAEBTQVmS3example_gamewin",
     "game_lose": "CAACAgIAAxkBAAEBTQZmS3example_gamelose",
+    "dice_roll": "CAACAgIAAxkBAAEBTQdmS3example_dice",
+    "wheel": "CAACAgIAAxkBAAEBTQhmS3example_wheel",
+    "mines": "CAACAgIAAxkBAAEBTQhmS3example_mines",
 }
 
 GIF_LOADING = "https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif"
 
-
 def safe_send_sticker(chat_id, key: str):
-    """Best-effort sticker sender — never breaks the flow if the sticker id is bad/unavailable."""
     file_id = STICKERS.get(key)
     if not file_id:
         return
@@ -70,13 +70,18 @@ def safe_send_sticker(chat_id, key: str):
     except Exception as e:
         logger.debug(f"Stiker yuborilmadi ({key}): {e}")
 
-
 def safe_send_animation(chat_id, url_or_id: str, caption: str = None):
     try:
         bot.send_animation(chat_id, url_or_id, caption=caption)
     except Exception as e:
         logger.debug(f"Animatsiya yuborilmadi: {e}")
 
+def send_dice_animation(chat_id, emoji: str = "🎲"):
+    try:
+        return bot.send_dice(chat_id, emoji=emoji)
+    except Exception as e:
+        logger.debug(f"Dice yuborilmadi: {e}")
+        return None
 
 DEFAULT_REQUIRED_CHANNELS = [
     {"username": "@ALFA_BONUS_NEWS", "title": "ALFA BONUS NEWS", "auto_remove_at": 0, "confirmed_count": 0},
@@ -93,19 +98,18 @@ DEFAULT_ADMINS = {
 }
 
 DEFAULT_MESSAGES = {
-    "welcome": "👋 Xush kelibsiz!",
+    "welcome": "👋 Xush kelibsiz! Botimizga qo'shilganingizdan mamnunmiz! 🎉",
     "not_subscribed": "⚠️ Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling.\n\n✅ Obuna bo'lgach «Tekshirish» ni bosing.",
     "subscribe_bonus_text": "🎉 Obuna uchun bonus berildi!",
     "join_chat_prompt": "💬 Rasmiy chatimizga qo'shiling — u yerda yangiliklar, aksiyalar va yordam bor!",
 }
 
-# Default mini-games configuration (admin can edit odds/multipliers per game)
 DEFAULT_GAMES = {
     "coin": {
         "name": "🪙 Tanga",
         "enabled": True,
-        "win_chance": 45,       # percent chance to win
-        "multiplier": 1.8,      # payout multiplier on win
+        "win_chance": 45,
+        "multiplier": 1.8,
         "min_bet": 500,
         "max_bet": 50000,
     },
@@ -125,6 +129,22 @@ DEFAULT_GAMES = {
         "min_bet": 1000,
         "max_bet": 30000,
     },
+    "wheel": {
+        "name": "🎡 Omad barabani",
+        "enabled": True,
+        "win_chance": 25,
+        "multiplier": 3.0,
+        "min_bet": 1000,
+        "max_bet": 50000,
+    },
+    "mines": {
+        "name": "💣 Mines (son topish)",
+        "enabled": True,
+        "win_chance": 35,
+        "multiplier": 2.2,
+        "min_bet": 500,
+        "max_bet": 30000,
+    },
 }
 
 DEFAULT_CONFIG = {
@@ -135,18 +155,24 @@ DEFAULT_CONFIG = {
     "subscribe_bonus": 200,
     "daily_bonus_range": [100, 500],
     "min_topup": 5000,
-    "services": [],            # each: {id, category, name, price, description}
-    "service_categories": [],  # each: {id, name}
+    "services": [],
+    "service_categories": [],
     "payment_cards": [],
     "payment_channel_id": None,
-    "orders_channel_id": None,   # separate channel for shop/order requests
-    "broadcast_targets": [],     # each: {id, title, type: group/channel}
+    "orders_channel_id": None,
+    "broadcast_targets": [],
     "messages": DEFAULT_MESSAGES,
     "games": DEFAULT_GAMES,
-    "promo_limits": {},           # code -> {"max_uses": int, "used_count": int}
-    "chat_link": None,            # NEW: official chat link (e.g. https://t.me/joinchat/xxx or @username)
-    "chat_title": "💬 Chatga qo'shilish",  # NEW: button label
-    "chat_enabled": True,          # NEW: admin on/off switch for the join-chat button
+    "promo_limits": {},
+    "chat_link": None,
+    "chat_title": "💬 Chatga qo'shilish",
+    "chat_enabled": True,
+    "maintenance_mode": False,
+    "referral_levels": [
+        {"level": 1, "bonus": 1000, "required": 0},
+        {"level": 2, "bonus": 2000, "required": 5},
+        {"level": 3, "bonus": 5000, "required": 20},
+    ],
 }
 
 DEFAULT_PROMO_CODES = {
@@ -163,14 +189,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 lock = threading.RLock()
 
-
 # =====================================
 # WEB / KEEP ALIVE
 # =====================================
 @app.route("/")
 def home():
     return "Bot ishlamoqda! 🤖"
-
 
 @app.route("/health")
 def health():
@@ -179,18 +203,15 @@ def health():
     except Exception as e:
         return {"status": "error", "error": str(e)}, 500
 
-
 def run_web():
     try:
         app.run(host="0.0.0.0", port=PORT)
     except Exception as e:
         logger.error(f"Web server xato: {e}")
 
-
 def keep_alive():
     t = threading.Thread(target=run_web, daemon=True)
     t.start()
-
 
 # =====================================
 # DATABASE
@@ -208,7 +229,6 @@ class Database:
                 return json.loads(content)
         except Exception as e:
             logger.error(f"{path} o'qishda xato: {e}")
-            # try to recover from the most recent backup instead of losing all data
             recovered = Database._recover_from_backup(path)
             if recovered is not None:
                 logger.info(f"{path} backupdan tiklandi")
@@ -268,8 +288,9 @@ class Database:
         merged_config.setdefault("chat_link", None)
         merged_config.setdefault("chat_title", "💬 Chatga qo'shilish")
         merged_config.setdefault("chat_enabled", True)
+        merged_config.setdefault("maintenance_mode", False)
+        merged_config.setdefault("referral_levels", DEFAULT_CONFIG["referral_levels"])
 
-        # normalize admin keys to str
         admins_data = {str(k): v for k, v in admins_data.items()}
         if not admins_data:
             admins_data = DEFAULT_ADMINS.copy()
@@ -290,8 +311,6 @@ class Database:
 
     @staticmethod
     def _atomic_write(path: str, data):
-        """Write to a temp file first, then rename — avoids corrupting the json file
-        if the process is killed mid-write."""
         tmp_path = f"{path}.tmp"
         try:
             with open(tmp_path, "w", encoding="utf-8") as f:
@@ -326,7 +345,6 @@ class Database:
 
     @staticmethod
     def _cleanup_old_backups(keep: int = 30):
-        """Keep only the most recent N backups per file to avoid unbounded disk growth."""
         try:
             if not os.path.isdir(BACKUP_DIR):
                 return
@@ -344,19 +362,12 @@ class Database:
         except Exception as e:
             logger.error(f"Backup tozalashda xato: {e}")
 
-
 users, orders, config, promo_codes, ADMINS = Database.load_all()
 
-# In-memory write buffering — batches rapid successive save_db() calls so we don't
-# do a blocking disk write on every single button press (this is the main source
-# of perceived bot "lag" under load).
 _save_pending = False
 _save_lock = threading.Lock()
 
-
 def save_db(force: bool = False):
-    """Marks data as dirty and lets a background thread flush it, so handlers
-    return to the user immediately instead of blocking on disk I/O."""
     global _save_pending
     if force:
         try:
@@ -367,11 +378,10 @@ def save_db(force: bool = False):
     with _save_lock:
         _save_pending = True
 
-
 def _flush_loop():
     global _save_pending
     while True:
-        time.sleep(1.5)
+        time.sleep(0.5)
         try:
             with _save_lock:
                 pending = _save_pending
@@ -381,9 +391,7 @@ def _flush_loop():
         except Exception as e:
             logger.error(f"Flush loop xato: {e}")
 
-
 threading.Thread(target=_flush_loop, daemon=True).start()
-
 
 def auto_backup():
     while True:
@@ -394,14 +402,10 @@ def auto_backup():
         except Exception as e:
             logger.error(f"Auto backup xato: {e}")
 
-
 threading.Thread(target=auto_backup, daemon=True).start()
-
 
 # =====================================
 # SAFE TELEGRAM API WRAPPERS
-# (every outward call to Telegram is wrapped so one failed send/edit never
-# crashes a handler or takes down the whole bot)
 # =====================================
 def safe_call(func, *args, **kwargs):
     try:
@@ -413,26 +417,23 @@ def safe_call(func, *args, **kwargs):
         logger.error(f"Kutilmagan xato ({func.__name__ if hasattr(func,'__name__') else func}): {e}")
         return None
 
-
 def safe_send_message(chat_id, text, **kwargs):
     return safe_call(bot.send_message, chat_id, text, **kwargs)
-
 
 def safe_edit_message_text(text, chat_id, message_id, **kwargs):
     return safe_call(bot.edit_message_text, text, chat_id, message_id, **kwargs)
 
-
 def safe_edit_message_caption(caption, chat_id, message_id, **kwargs):
     return safe_call(bot.edit_message_caption, caption, chat_id, message_id, **kwargs)
-
 
 def safe_send_photo(chat_id, photo, **kwargs):
     return safe_call(bot.send_photo, chat_id, photo, **kwargs)
 
-
 def safe_answer_callback_query(call_id, text=None, **kwargs):
     return safe_call(bot.answer_callback_query, call_id, text, **kwargs)
 
+def safe_send_dice(chat_id, emoji: str = "🎲"):
+    return safe_call(bot.send_dice, chat_id, emoji=emoji)
 
 # =====================================
 # HELPERS
@@ -440,13 +441,11 @@ def safe_answer_callback_query(call_id, text=None, **kwargs):
 def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-
 def is_admin(user_id: int) -> bool:
     try:
         return str(user_id) in ADMINS
     except Exception:
         return False
-
 
 def is_superadmin(user_id: int) -> bool:
     try:
@@ -454,13 +453,11 @@ def is_superadmin(user_id: int) -> bool:
     except Exception:
         return False
 
-
 def get_text(key: str) -> str:
     try:
         return config.get("messages", {}).get(key, DEFAULT_MESSAGES.get(key, ""))
     except Exception:
         return DEFAULT_MESSAGES.get(key, "")
-
 
 def new_id(seq: List[Dict[str, Any]]) -> int:
     try:
@@ -468,20 +465,17 @@ def new_id(seq: List[Dict[str, Any]]) -> int:
     except Exception:
         return int(time.time())
 
-
 def safe_int(value, default=0) -> int:
     try:
         return int(str(value).strip().replace(" ", ""))
     except Exception:
         return default
 
-
 def safe_float(value, default=0.0) -> float:
     try:
         return float(str(value).strip().replace(" ", ""))
     except Exception:
         return default
-
 
 def ensure_user(message_or_user) -> str:
     try:
@@ -500,6 +494,7 @@ def ensure_user(message_or_user) -> str:
                 "balance": 0,
                 "referrals_count": 0,
                 "referred_by": None,
+                "referrals_list": [],
                 "completed_earn_tasks": [],
                 "confirmed_required_channels": [],
                 "bonus_date": "",
@@ -518,10 +513,14 @@ def ensure_user(message_or_user) -> str:
                 "total_won": 0,
                 "admin_topups_total": 0,
                 "joined_chat": False,
+                "mines_field": None,
+                "mines_bet": 0,
+                "mines_revealed": [],
+                "mines_count": 3,
+                "pending_game": None,
             }
             save_db()
         else:
-            # sync username / name changes
             new_username = f"@{user.username}" if user.username else "Noma'lum"
             changed = False
             if users[user_id].get("username") != new_username:
@@ -536,6 +535,8 @@ def ensure_user(message_or_user) -> str:
             for k, default_v in {
                 "games_played": 0, "games_won": 0, "total_wagered": 0,
                 "total_won": 0, "admin_topups_total": 0, "joined_chat": False,
+                "referrals_list": [], "mines_field": None, "mines_bet": 0,
+                "mines_revealed": [], "mines_count": 3, "pending_game": None,
             }.items():
                 if k not in users[user_id]:
                     users[user_id][k] = default_v
@@ -545,14 +546,12 @@ def ensure_user(message_or_user) -> str:
         return user_id
     except Exception as e:
         logger.error(f"ensure_user xato: {e}")
-        # Still try to return something usable
         try:
             uid = str(message_or_user.from_user.id if hasattr(message_or_user, "from_user") else message_or_user.id)
         except Exception:
             uid = "0"
         users.setdefault(uid, {"user_id": uid, "balance": 0})
         return uid
-
 
 def safe_username(user_or_id) -> str:
     try:
@@ -571,13 +570,11 @@ def safe_username(user_or_id) -> str:
     except Exception:
         return "Noma'lum"
 
-
 def user_blocked(user_id: str) -> bool:
     try:
         return users.get(user_id, {}).get("blocked", False)
     except Exception:
         return False
-
 
 def is_channel_member(channel_username: str, user_id: int) -> bool:
     try:
@@ -585,12 +582,7 @@ def is_channel_member(channel_username: str, user_id: int) -> bool:
         return member.status not in ["left", "kicked"]
     except Exception as e:
         logger.error(f"Obuna tekshirish xato {channel_username}: {e}")
-        # Fail-open would let unsubscribed users in; fail-closed is safer for the
-        # business logic here — but we don't want a Telegram hiccup to permanently
-        # lock a legit user out either, so we only fail-closed (return False),
-        # matching prior behavior, while the error is fully contained.
         return False
-
 
 def check_subscription(user_id: int) -> bool:
     try:
@@ -603,9 +595,7 @@ def check_subscription(user_id: int) -> bool:
         logger.error(f"check_subscription xato: {e}")
         return False
 
-
 def register_confirmed_channels(uid: str, telegram_user_id: int):
-    """Track how many unique users confirmed each required channel & auto-remove if threshold reached."""
     try:
         confirmed = users[uid].setdefault("confirmed_required_channels", [])
         required_channels = config.get("required_channels", [])
@@ -632,7 +622,6 @@ def register_confirmed_channels(uid: str, telegram_user_id: int):
     except Exception as e:
         logger.error(f"register_confirmed_channels xato: {e}")
 
-
 def notify_admins(text: str):
     for admin_id in list(ADMINS.keys()):
         try:
@@ -640,9 +629,7 @@ def notify_admins(text: str):
         except Exception as e:
             logger.debug(f"Adminga xabar yuborilmadi ({admin_id}): {e}")
 
-
 def send_order_to_channel(caption: str, markup=None, photo_file_id: Optional[str] = None):
-    """Send shop/order requests to the dedicated orders channel, falling back to admins."""
     channel_id = config.get("orders_channel_id")
     sent = False
     if channel_id:
@@ -664,11 +651,13 @@ def send_order_to_channel(caption: str, markup=None, photo_file_id: Optional[str
             except Exception as e:
                 logger.debug(f"Admin fallback xato ({admin_id}): {e}")
 
-
 def subscription_required(func):
     @wraps(func)
     def wrapper(message, *args, **kwargs):
         try:
+            if config.get("maintenance_mode", False) and not is_admin(message.from_user.id):
+                safe_send_message(message.chat.id, "🔧 Bot texnik ishlar olib borilmoqda. Iltimos, keyinroq urinib ko'ring.")
+                return
             uid = ensure_user(message)
             users[uid]["last_active"] = now_str()
             if user_blocked(uid):
@@ -683,7 +672,6 @@ def subscription_required(func):
             safe_send_message(message.chat.id, "⚠️ Kutilmagan xatolik yuz berdi. Iltimos qaytadan urinib ko'ring.")
     return wrapper
 
-
 def admin_required(func):
     @wraps(func)
     def wrapper(message, *args, **kwargs):
@@ -695,7 +683,6 @@ def admin_required(func):
             logger.error(f"Admin handler xato ({func.__name__}): {e}", exc_info=True)
             safe_send_message(message.chat.id, "⚠️ Xatolik yuz berdi.")
     return wrapper
-
 
 def superadmin_required(func):
     @wraps(func)
@@ -710,11 +697,7 @@ def superadmin_required(func):
             safe_send_message(message.chat.id, "⚠️ Xatolik yuz berdi.")
     return wrapper
 
-
 def safe_callback_handler(func):
-    """Wraps every callback_query handler so a single bad callback (stale message,
-    deleted message, network hiccup) can't silently freeze that button forever or
-    crash the polling thread."""
     @wraps(func)
     def wrapper(call, *args, **kwargs):
         try:
@@ -724,10 +707,7 @@ def safe_callback_handler(func):
             safe_answer_callback_query(call.id, "⚠️ Xatolik yuz berdi, qaytadan urinib ko'ring")
     return wrapper
 
-
 def safe_next_step(func):
-    """Wraps register_next_step_handler callbacks so users can't get stuck in a
-    broken conversation state after an exception."""
     @wraps(func)
     def wrapper(message, *args, **kwargs):
         try:
@@ -740,21 +720,16 @@ def safe_next_step(func):
                 pass
     return wrapper
 
-
 # =====================================
-# MENUS (restructured per new requirements)
-# "💬 Chatga qo'shilish" is now the FIRST button on every user-facing menu.
+# MENUS
 # =====================================
 def build_main_menu(is_admin_flag: bool = False):
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    if is_admin_flag:
-        # Admin sees the chat button + admin panel entry point on main menu
-        if config.get("chat_enabled", True) and config.get("chat_link"):
-            kb.add(config.get("chat_title", "💬 Chatga qo'shilish"))
-        kb.add("👨‍💻 Admin panel")
-        return kb
     if config.get("chat_enabled", True) and config.get("chat_link"):
         kb.add(config.get("chat_title", "💬 Chatga qo'shilish"))
+    if is_admin_flag:
+        kb.add("👨‍💻 Admin panel")
+        return kb
     rows = [
         ["💸 Pul ishlash", "📊 Hisobim"],
         ["🛍 Xizmatlar", "🏆 Reyting"],
@@ -763,7 +738,6 @@ def build_main_menu(is_admin_flag: bool = False):
         kb.add(*row)
     return kb
 
-
 def earn_submenu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     kb.add("🎁 Kunlik bonus", "👥 Referal")
@@ -771,14 +745,12 @@ def earn_submenu():
     kb.add("📋 Vazifalar", "⬅️ Asosiy menyu")
     return kb
 
-
 def profile_submenu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     kb.add("➕ Hisobni to'ldirish", "⚙️ Sozlamalar")
     kb.add("📜 Buyurtmalar tarixi", "📩 Adminga yozish")
     kb.add("⬅️ Asosiy menyu")
     return kb
-
 
 def games_submenu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -789,7 +761,6 @@ def games_submenu():
     kb.add("⬅️ Ortga")
     return kb
 
-
 def settings_submenu(uid: str):
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     notif = "🔔 Bildirishnoma: ON" if users.get(uid, {}).get("notifications", True) else "🔕 Bildirishnoma: OFF"
@@ -797,7 +768,6 @@ def settings_submenu(uid: str):
     kb.add("🌐 Til sozlamalari", "📄 Mening ma'lumotlarim")
     kb.add("⬅️ Ortga")
     return kb
-
 
 def admin_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -808,16 +778,14 @@ def admin_menu():
     kb.add("🎟 Promokodlar", "💰 Referal/Bonuslar")
     kb.add("🎮 Mini-o'yinlar sozlamalari", "💵 Hisob to'ldirish (admin)")
     kb.add("💬 Chat sozlamalari", "✉️ Matnlar")
-    kb.add("👨‍💻 Adminlar")
+    kb.add("👨‍💻 Adminlar", "🔧 Tizim sozlamalari")
     kb.add("⬅️ Foydalanuvchi rejimi")
     return kb
-
 
 def back_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("⬅️ Ortga")
     return kb
-
 
 def show_required_channels(chat_id: int):
     markup = InlineKeyboardMarkup(row_width=1)
@@ -830,7 +798,6 @@ def show_required_channels(chat_id: int):
         )
     markup.add(InlineKeyboardButton("✅ Tekshirish", callback_data="check_subs"))
     safe_send_message(chat_id, get_text("not_subscribed"), reply_markup=markup)
-
 
 def create_order(kind: str, user_id: str, extra: Dict[str, Any]) -> int:
     order_id = new_id(orders)
@@ -846,21 +813,23 @@ def create_order(kind: str, user_id: str, extra: Dict[str, Any]) -> int:
     save_db()
     return order_id
 
-
 def find_order(order_id: int) -> Optional[Dict[str, Any]]:
     for order in orders:
         if order.get("id") == order_id:
             return order
     return None
 
-
 def complete_order_stats(uid: str):
     users[uid]["orders_count"] = users[uid].get("orders_count", 0) + 1
 
+def get_referral_level(ref_count: int) -> Dict[str, Any]:
+    levels = config.get("referral_levels", DEFAULT_CONFIG["referral_levels"])
+    best = levels[0]
+    for level in levels:
+        if ref_count >= level.get("required", 0):
+            best = level
+    return best
 
-# =====================================
-# REFERRAL (simple, single level)
-# =====================================
 def add_referral(referrer_id: str, new_user_id: str) -> bool:
     try:
         if referrer_id == new_user_id:
@@ -872,14 +841,24 @@ def add_referral(referrer_id: str, new_user_id: str) -> bool:
 
         users[new_user_id]["referred_by"] = referrer_id
         users[referrer_id]["referrals_count"] = users[referrer_id].get("referrals_count", 0) + 1
-        bonus = int(config.get("referral_bonus", 1000))
+        users[referrer_id].setdefault("referrals_list", []).append({
+            "user_id": new_user_id,
+            "username": users[new_user_id].get("username", "Noma'lum"),
+            "date": now_str()
+        })
+        
+        level = get_referral_level(users[referrer_id]["referrals_count"])
+        bonus = int(level.get("bonus", 1000))
         users[referrer_id]["balance"] += bonus
         save_db()
 
         try:
-            bot.send_message(
+            safe_send_message(
                 int(referrer_id),
-                f"👥 Sizga yangi referal qo'shildi!\n💰 Bonus: +{bonus} so'm\n👤 {safe_username(new_user_id)}",
+                f"👥 Sizga yangi referal qo'shildi!\n"
+                f"👤 {safe_username(new_user_id)}\n"
+                f"📊 Referallaringiz: {users[referrer_id]['referrals_count']} ta\n"
+                f"💰 Bonus: +{bonus} so'm (🔰 {level.get('level')}-daraja)"
             )
         except Exception:
             pass
@@ -888,9 +867,8 @@ def add_referral(referrer_id: str, new_user_id: str) -> bool:
         logger.error(f"Referral xato: {e}")
         return False
 
-
 # =====================================
-# CHAT JOIN FEATURE (new — button always first in menus)
+# CHAT JOIN FEATURE
 # =====================================
 @bot.message_handler(func=lambda m: m.text and config.get("chat_link") and m.text == config.get("chat_title", "💬 Chatga qo'shilish"))
 def join_chat_handler(message):
@@ -913,7 +891,6 @@ def join_chat_handler(message):
         logger.error(f"join_chat_handler xato: {e}")
         safe_send_message(message.chat.id, "⚠️ Xatolik yuz berdi.")
 
-
 @bot.message_handler(func=lambda m: m.text == "💬 Chat sozlamalari" and is_admin(m.from_user.id))
 @admin_required
 def admin_chat_settings(message):
@@ -932,7 +909,6 @@ def admin_chat_settings(message):
     markup.add(InlineKeyboardButton(f"🔄 Holatni almashtirish", callback_data="chat_toggle"))
     safe_send_message(message.chat.id, text, reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "chat_set_link")
 @safe_callback_handler
 def chat_set_link(c):
@@ -941,7 +917,6 @@ def chat_set_link(c):
     msg = safe_send_message(c.message.chat.id, "🔗 Chat havolasini kiriting (masalan https://t.me/+AbCdEf yoki @username):")
     if msg:
         bot.register_next_step_handler(msg, process_chat_set_link)
-
 
 @safe_next_step
 def process_chat_set_link(message):
@@ -952,7 +927,6 @@ def process_chat_set_link(message):
     save_db()
     safe_send_message(message.chat.id, "✅ Chat havolasi saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "chat_set_title")
 @safe_callback_handler
 def chat_set_title(c):
@@ -962,13 +936,11 @@ def chat_set_title(c):
     if msg:
         bot.register_next_step_handler(msg, process_chat_set_title)
 
-
 @safe_next_step
 def process_chat_set_title(message):
     config["chat_title"] = message.text.strip()
     save_db()
     safe_send_message(message.chat.id, "✅ Tugma nomi saqlandi", reply_markup=admin_menu())
-
 
 @bot.callback_query_handler(func=lambda c: c.data == "chat_toggle")
 @safe_callback_handler
@@ -978,7 +950,6 @@ def chat_toggle(c):
     config["chat_enabled"] = not config.get("chat_enabled", True)
     save_db()
     safe_answer_callback_query(c.id, "✅ Holat o'zgartirildi")
-
 
 # =====================================
 # START
@@ -1012,7 +983,10 @@ def start(message):
             safe_send_sticker(message.chat.id, "welcome")
             safe_send_message(
                 message.chat.id,
-                f"{get_text('welcome')}\n\n💰 Ro'yxatdan o'tish bonusi: +{welcome_bonus} so'm\n⚖️ Balans: {users[user_id]['balance']} so'm",
+                f"{get_text('welcome')}\n\n"
+                f"💰 Ro'yxatdan o'tish bonusi: +{welcome_bonus} so'm\n"
+                f"⚖️ Balans: {users[user_id]['balance']} so'm\n"
+                f"🔰 Referal darajangiz: {get_referral_level(0).get('level')}",
                 reply_markup=build_main_menu(is_admin(message.from_user.id)),
             )
             return
@@ -1020,13 +994,15 @@ def start(message):
         save_db()
         safe_send_message(
             message.chat.id,
-            f"{get_text('welcome')}\n\n💰 Balans: {users[user_id]['balance']} so'm\n👥 Referallar: {users[user_id].get('referrals_count', 0)} ta",
+            f"{get_text('welcome')}\n\n"
+            f"💰 Balans: {users[user_id]['balance']} so'm\n"
+            f"👥 Referallar: {users[user_id].get('referrals_count', 0)} ta\n"
+            f"🔰 Daraja: {get_referral_level(users[user_id].get('referrals_count', 0)).get('level')}",
             reply_markup=build_main_menu(is_admin(message.from_user.id)),
         )
     except Exception as e:
         logger.error(f"/start xato: {e}", exc_info=True)
         safe_send_message(message.chat.id, "⚠️ Botni ishga tushirishda xatolik. Qaytadan /start bosing.")
-
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_subs")
 @safe_callback_handler
@@ -1053,15 +1029,13 @@ def check_subs_callback(call):
         safe_answer_callback_query(call.id, "❌ Hali barcha kanallarga obuna bo'lmagansiz")
         show_required_channels(call.message.chat.id)
 
-
 # =====================================
-# NAVIGATION HUBS: Pul ishlash / Hisobim
+# NAVIGATION HUBS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "💸 Pul ishlash")
 @subscription_required
 def earn_hub(message):
     safe_send_message(message.chat.id, "💸 Pul ishlash bo'limi. Kerakli bo'limni tanlang:", reply_markup=earn_submenu())
-
 
 @bot.message_handler(func=lambda m: m.text == "📊 Hisobim")
 @subscription_required
@@ -1075,14 +1049,14 @@ def profile_hub(message):
         f"📅 Ro'yxat: {user.get('join_date', 'Noma\'lum')}\n\n"
         f"💰 Balans: {user.get('balance', 0):,} so'm\n"
         f"👥 Referallar: {user.get('referrals_count', 0)} ta\n"
+        f"🔰 Daraja: {get_referral_level(user.get('referrals_count', 0)).get('level')}\n"
         f"📦 Buyurtmalar: {user.get('orders_count', 0)} ta\n"
         f"🎮 O'yinlar: {user.get('games_played', 0)} ta (yutgan: {user.get('games_won', 0)})"
     )
     safe_send_message(message.chat.id, text, reply_markup=profile_submenu())
 
-
 # =====================================
-# BONUS / REFERRAL / PROMO (now under "Pul ishlash")
+# BONUS / REFERRAL / PROMO
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "🎁 Kunlik bonus")
 @subscription_required
@@ -1103,8 +1077,8 @@ def daily_bonus(message):
     users[user_id]["bonus_date"] = today
     save_db()
     safe_send_sticker(message.chat.id, "money")
+    safe_send_animation(message.chat.id, GIF_LOADING, caption="🎉 Kunlik bonus hisoblanmoqda...")
     safe_send_message(message.chat.id, f"🎉 Kunlik bonus!\n💰 +{bonus} so'm")
-
 
 @bot.message_handler(func=lambda m: m.text == "👥 Referal")
 @subscription_required
@@ -1113,16 +1087,41 @@ def referral_menu(message):
     me = safe_call(bot.get_me)
     me_username = me.username if me else "bot"
     ref_link = f"https://t.me/{me_username}?start={user_id}"
+    
+    ref_list = users[user_id].get("referrals_list", [])
+    ref_text = ""
+    if ref_list:
+        ref_text = "\n\n👥 <b>Referallar ro'yxati:</b>\n"
+        for i, ref in enumerate(ref_list[-10:], 1):
+            ref_text += f"{i}. {ref.get('username', 'Noma\'lum')} - {ref.get('date', '')}\n"
+        if len(ref_list) > 10:
+            ref_text += f"\n... va yana {len(ref_list) - 10} ta"
+    
+    level = get_referral_level(users[user_id].get('referrals_count', 0))
+    
     text = (
         f"👥 <b>Referal dasturi</b>\n\n"
         f"👥 Referallaringiz: {users[user_id].get('referrals_count', 0)} ta\n"
-        f"💰 Har bir referal uchun bonus: {int(config.get('referral_bonus', 1000)):,} so'm\n\n"
+        f"🔰 Sizning darajangiz: {level.get('level')}\n"
+        f"💰 Hozirgi darajadagi bonus: {level.get('bonus'):,} so'm\n"
+        f"📈 Keyingi daraja uchun: {level.get('required', 0)} ta referal\n\n"
         f"🔗 Havolangiz:\n<code>{ref_link}</code>"
+        f"{ref_text}"
     )
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("📢 Do'stlarga yuborish", switch_inline_query=f"Taklif havolam: {ref_link}"))
+    markup.add(InlineKeyboardButton("📊 Darajalar haqida", callback_data="show_referral_levels"))
     safe_send_message(message.chat.id, text, reply_markup=markup)
 
+@bot.callback_query_handler(func=lambda c: c.data == "show_referral_levels")
+@safe_callback_handler
+def show_referral_levels(c):
+    levels = config.get("referral_levels", DEFAULT_CONFIG["referral_levels"])
+    text = "🔰 <b>Referal darajalari</b>\n\n"
+    for level in levels:
+        text += f"🔹 {level.get('level')}-daraja: {level.get('required')}+ referal → {level.get('bonus'):,} so'm bonus\n"
+    safe_answer_callback_query(c.id)
+    safe_send_message(c.message.chat.id, text)
 
 @bot.message_handler(func=lambda m: m.text == "🎟 Promokod")
 @subscription_required
@@ -1130,7 +1129,6 @@ def promo_menu(message):
     msg = safe_send_message(message.chat.id, "🎟 Promokodni kiriting:", reply_markup=back_menu())
     if msg:
         bot.register_next_step_handler(msg, process_promo)
-
 
 @safe_next_step
 def process_promo(message):
@@ -1158,11 +1156,11 @@ def process_promo(message):
     users[uid]["balance"] += amount
     save_db()
     safe_send_sticker(message.chat.id, "success")
+    safe_send_animation(message.chat.id, GIF_LOADING, caption="💰 Promokod qabul qilindi...")
     safe_send_message(message.chat.id, f"✅ Promokod ishladi: +{amount} so'm", reply_markup=earn_submenu())
 
-
 # =====================================
-# MINI-GAMES (coin / dice / slot) — admin-tunable odds & multiplier
+# MINI-GAMES (enhanced with animations)
 # =====================================
 def _game_key_from_text(text: str) -> Optional[str]:
     try:
@@ -1173,7 +1171,6 @@ def _game_key_from_text(text: str) -> Optional[str]:
         pass
     return None
 
-
 @bot.message_handler(func=lambda m: m.text == "🎮 Mini-o'yinlar")
 @subscription_required
 def games_menu(message):
@@ -1182,7 +1179,6 @@ def games_menu(message):
         safe_send_message(message.chat.id, "❌ Hozircha o'yinlar mavjud emas.", reply_markup=earn_submenu())
         return
     safe_send_message(message.chat.id, "🎮 O'yinni tanlang:", reply_markup=games_submenu())
-
 
 @bot.message_handler(func=lambda m: _game_key_from_text(m.text) is not None)
 @subscription_required
@@ -1197,7 +1193,8 @@ def game_selected(message):
     save_db()
     msg = safe_send_message(
         message.chat.id,
-        f"{game['name']}\n\n💰 Balans: {users[uid]['balance']:,} so'm\n"
+        f"{game['name']}\n\n"
+        f"💰 Balans: {users[uid]['balance']:,} so'm\n"
         f"🎯 Yutish ehtimoli: {game.get('win_chance', 0)}%\n"
         f"✖️ Koeffitsiyent: x{game.get('multiplier', 1)}\n"
         f"📉 Min stavka: {game.get('min_bet', 0):,} so'm\n"
@@ -1207,7 +1204,6 @@ def game_selected(message):
     )
     if msg:
         bot.register_next_step_handler(msg, process_game_bet, key)
-
 
 @safe_next_step
 def process_game_bet(message, key: str):
@@ -1238,13 +1234,96 @@ def process_game_bet(message, key: str):
         safe_send_message(message.chat.id, "❌ Balansingiz yetarli emas", reply_markup=games_submenu())
         return
 
-    win_chance = float(game.get("win_chance", 50))
-    multiplier = float(game.get("multiplier", 2))
-    won = random.uniform(0, 100) < win_chance
-
     users[uid]["balance"] -= bet
     users[uid]["games_played"] = users[uid].get("games_played", 0) + 1
     users[uid]["total_wagered"] = users[uid].get("total_wagered", 0) + bet
+
+    if key == "dice":
+        msg = safe_send_dice(message.chat.id, "🎲")
+        if msg:
+            dice_value = msg.dice.value
+            win_chance = float(game.get("win_chance", 30))
+            won = dice_value >= 5
+            if won:
+                payout = int(bet * float(game.get("multiplier", 2.5)))
+                users[uid]["balance"] += payout
+                users[uid]["games_won"] = users[uid].get("games_won", 0) + 1
+                users[uid]["total_won"] = users[uid].get("total_won", 0) + payout
+                save_db()
+                safe_send_sticker(message.chat.id, "game_win")
+                safe_send_message(
+                    message.chat.id,
+                    f"🎉 Siz yutdingiz!\n{game['name']}\n"
+                    f"🎲 Natija: {dice_value}\n"
+                    f"💰 Stavka: {bet:,} so'm\n"
+                    f"✅ Yutuq: +{payout:,} so'm\n"
+                    f"⚖️ Balans: {users[uid]['balance']:,} so'm",
+                    reply_markup=games_submenu(),
+                )
+            else:
+                save_db()
+                safe_send_sticker(message.chat.id, "game_lose")
+                safe_send_message(
+                    message.chat.id,
+                    f"😔 Siz yutqazdingiz.\n{game['name']}\n"
+                    f"🎲 Natija: {dice_value}\n"
+                    f"💸 Stavka: -{bet:,} so'm\n"
+                    f"⚖️ Balans: {users[uid]['balance']:,} so'm",
+                    reply_markup=games_submenu(),
+                )
+            return
+
+    if key == "wheel":
+        safe_send_animation(message.chat.id, "https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif", caption="🎡 Baraban aylanmoqda...")
+        time.sleep(1)
+        win_chance = float(game.get("win_chance", 25))
+        won = random.uniform(0, 100) < win_chance
+        if won:
+            payout = int(bet * float(game.get("multiplier", 3.0)))
+            users[uid]["balance"] += payout
+            users[uid]["games_won"] = users[uid].get("games_won", 0) + 1
+            users[uid]["total_won"] = users[uid].get("total_won", 0) + payout
+            save_db()
+            safe_send_sticker(message.chat.id, "game_win")
+            safe_send_message(
+                message.chat.id,
+                f"🎉 Siz yutdingiz!\n{game['name']}\n"
+                f"💰 Stavka: {bet:,} so'm\n"
+                f"✅ Yutuq: +{payout:,} so'm\n"
+                f"⚖️ Balans: {users[uid]['balance']:,} so'm",
+                reply_markup=games_submenu(),
+            )
+        else:
+            save_db()
+            safe_send_sticker(message.chat.id, "game_lose")
+            safe_send_message(
+                message.chat.id,
+                f"😔 Siz yutqazdingiz.\n{game['name']}\n"
+                f"💸 Stavka: -{bet:,} so'm\n"
+                f"⚖️ Balans: {users[uid]['balance']:,} so'm",
+                reply_markup=games_submenu(),
+            )
+        return
+
+    if key == "mines":
+        users[uid]["mines_bet"] = bet
+        users[uid]["mines_count"] = 3
+        users[uid]["mines_revealed"] = []
+        field = [[0 for _ in range(5)] for _ in range(5)]
+        mines = set()
+        while len(mines) < 3:
+            mines.add((random.randint(0, 4), random.randint(0, 4)))
+        for r, c in mines:
+            field[r][c] = -1
+        users[uid]["mines_field"] = field
+        save_db()
+        show_mines_field(message.chat.id, uid)
+        return
+
+    # Coin or other games
+    win_chance = float(game.get("win_chance", 50))
+    multiplier = float(game.get("multiplier", 2))
+    won = random.uniform(0, 100) < win_chance
 
     if won:
         payout = int(bet * multiplier)
@@ -1255,7 +1334,10 @@ def process_game_bet(message, key: str):
         safe_send_sticker(message.chat.id, "game_win")
         safe_send_message(
             message.chat.id,
-            f"🎉 Siz yutdingiz!\n{game['name']}\n💰 Stavka: {bet:,} so'm\n✅ Yutuq: +{payout:,} so'm\n⚖️ Balans: {users[uid]['balance']:,} so'm",
+            f"🎉 Siz yutdingiz!\n{game['name']}\n"
+            f"💰 Stavka: {bet:,} so'm\n"
+            f"✅ Yutuq: +{payout:,} so'm\n"
+            f"⚖️ Balans: {users[uid]['balance']:,} so'm",
             reply_markup=games_submenu(),
         )
     else:
@@ -1263,13 +1345,137 @@ def process_game_bet(message, key: str):
         safe_send_sticker(message.chat.id, "game_lose")
         safe_send_message(
             message.chat.id,
-            f"😔 Siz yutqazdingiz.\n{game['name']}\n💸 Stavka: -{bet:,} so'm\n⚖️ Balans: {users[uid]['balance']:,} so'm",
+            f"😔 Siz yutqazdingiz.\n{game['name']}\n"
+            f"💸 Stavka: -{bet:,} so'm\n"
+            f"⚖️ Balans: {users[uid]['balance']:,} so'm",
             reply_markup=games_submenu(),
         )
 
+def show_mines_field(chat_id: int, uid: str):
+    field = users[uid].get("mines_field")
+    if not field:
+        return
+    revealed = users[uid].get("mines_revealed", [])
+    markup = InlineKeyboardMarkup(row_width=5)
+    for r in range(5):
+        row = []
+        for c in range(5):
+            if (r, c) in revealed:
+                if field[r][c] == -1:
+                    row.append(InlineKeyboardButton("💣", callback_data=f"mines_noop"))
+                else:
+                    row.append(InlineKeyboardButton("✅", callback_data=f"mines_noop"))
+            else:
+                row.append(InlineKeyboardButton("❓", callback_data=f"mines_reveal_{r}_{c}"))
+        markup.add(*row)
+    
+    markup.row(
+        InlineKeyboardButton("💵 Qabul qilish", callback_data="mines_cashout"),
+        InlineKeyboardButton("⬅️ Chiqish", callback_data="mines_exit")
+    )
+    
+    bet = users[uid].get("mines_bet", 0)
+    multiplier = float(config.get("games", {}).get("mines", {}).get("multiplier", 2.2))
+    current_payout = int(bet * (1 + (len(revealed) * 0.2)))
+    
+    text = (
+        f"💣 <b>Mines</b>\n\n"
+        f"💰 Stavka: {bet:,} so'm\n"
+        f"🎯 Yulduzchalar: {len(revealed)} ta\n"
+        f"💵 Hozirgi yutuq: {current_payout:,} so'm\n"
+        f"⚠️ 3 ta mina bor. Minaga bossangiz yutqazasiz!"
+    )
+    safe_send_message(chat_id, text, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("mines_reveal_"))
+@safe_callback_handler
+def mines_reveal(c):
+    uid = str(c.from_user.id)
+    _, _, r_str, c_str = c.data.split("_")
+    r, c = int(r_str), int(c_str)
+    
+    field = users[uid].get("mines_field")
+    if not field:
+        safe_answer_callback_query(c.id, "❌ O'yin topilmadi")
+        return
+    
+    revealed = users[uid].get("mines_revealed", [])
+    if (r, c) in revealed:
+        safe_answer_callback_query(c.id, "❌ Bu katak allaqachon ochilgan")
+        return
+    
+    if field[r][c] == -1:
+        safe_answer_callback_query(c.id, "💥 Minaga bosdingiz!")
+        users[uid]["mines_field"] = None
+        users[uid]["mines_revealed"] = []
+        save_db()
+        safe_send_sticker(c.message.chat.id, "game_lose")
+        safe_send_message(
+            c.message.chat.id,
+            f"💥 Minaga bosdingiz!\n"
+            f"💸 Stavka: -{users[uid].get('mines_bet', 0):,} so'm\n"
+            f"⚖️ Balans: {users[uid]['balance']:,} so'm",
+            reply_markup=games_submenu()
+        )
+        return
+    
+    revealed.append((r, c))
+    users[uid]["mines_revealed"] = revealed
+    save_db()
+    
+    safe_answer_callback_query(c.id, "✅ Katak ochildi")
+    show_mines_field(c.message.chat.id, uid)
+
+@bot.callback_query_handler(func=lambda c: c.data == "mines_cashout")
+@safe_callback_handler
+def mines_cashout(c):
+    uid = str(c.from_user.id)
+    field = users[uid].get("mines_field")
+    if not field:
+        safe_answer_callback_query(c.id, "❌ O'yin topilmadi")
+        return
+    
+    revealed = users[uid].get("mines_revealed", [])
+    bet = users[uid].get("mines_bet", 0)
+    payout = int(bet * (1 + (len(revealed) * 0.2)))
+    
+    users[uid]["balance"] += payout
+    users[uid]["games_won"] = users[uid].get("games_won", 0) + 1
+    users[uid]["total_won"] = users[uid].get("total_won", 0) + payout
+    users[uid]["mines_field"] = None
+    users[uid]["mines_revealed"] = []
+    save_db()
+    
+    safe_answer_callback_query(c.id, f"✅ {payout:,} so'm yutdingiz!")
+    safe_send_sticker(c.message.chat.id, "game_win")
+    safe_send_message(
+        c.message.chat.id,
+        f"🎉 Siz yutdingiz!\n"
+        f"💣 Mines\n"
+        f"🎯 {len(revealed)} ta yulduzcha\n"
+        f"💰 Stavka: {bet:,} so'm\n"
+        f"✅ Yutuq: +{payout:,} so'm\n"
+        f"⚖️ Balans: {users[uid]['balance']:,} so'm",
+        reply_markup=games_submenu()
+    )
+
+@bot.callback_query_handler(func=lambda c: c.data == "mines_exit")
+@safe_callback_handler
+def mines_exit(c):
+    uid = str(c.from_user.id)
+    users[uid]["mines_field"] = None
+    users[uid]["mines_revealed"] = []
+    save_db()
+    safe_answer_callback_query(c.id, "⬅️ O'yindan chiqdingiz")
+    safe_send_message(c.message.chat.id, "🔙 O'yindan chiqdingiz", reply_markup=games_submenu())
+
+@bot.callback_query_handler(func=lambda c: c.data == "mines_noop")
+@safe_callback_handler
+def mines_noop(c):
+    safe_answer_callback_query(c.id)
 
 # =====================================
-# LEADERBOARD (enhanced)
+# LEADERBOARD
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "🏆 Reyting")
 @subscription_required
@@ -1281,7 +1487,6 @@ def leaderboard_menu(message):
     markup.add(InlineKeyboardButton("🎮 O'yinlarda yutuq bo'yicha", callback_data="top_gamewin"))
     markup.add(InlineKeyboardButton("🎯 Mening o'rnim", callback_data="my_rank"))
     safe_send_message(message.chat.id, "🏆 Reyting turini tanlang:", reply_markup=markup)
-
 
 def _render_top(field: str, label: str, suffix: str):
     ranking = [(uid, u.get(field, 0)) for uid, u in users.items() if u.get(field, 0) > 0]
@@ -1295,7 +1500,6 @@ def _render_top(field: str, label: str, suffix: str):
         lines.append(f"\n{prefix} {safe_username(uid)} — {val:,} {suffix}")
     return "\n".join(lines)
 
-
 def _user_rank(uid: str, field: str):
     ranking = [(u, d.get(field, 0)) for u, d in users.items()]
     ranking.sort(key=lambda x: x[1], reverse=True)
@@ -1303,7 +1507,6 @@ def _user_rank(uid: str, field: str):
         if u == uid:
             return i, val
     return None, 0
-
 
 @bot.callback_query_handler(func=lambda c: c.data in ["top_ref", "top_orders", "top_balance", "top_gamewin"])
 @safe_callback_handler
@@ -1316,11 +1519,8 @@ def leaderboard_callback(c):
         text = _render_top("total_won", "TOP o'yin yutuqlari", "so'm")
     else:
         text = _render_top("balance", "TOP balans", "so'm")
-    result = safe_edit_message_text(text, c.message.chat.id, c.message.message_id, reply_markup=c.message.reply_markup)
-    if result is None:
-        safe_send_message(c.message.chat.id, text)
     safe_answer_callback_query(c.id)
-
+    safe_send_message(c.message.chat.id, text)
 
 @bot.callback_query_handler(func=lambda c: c.data == "my_rank")
 @safe_callback_handler
@@ -1338,14 +1538,12 @@ def my_rank_callback(c):
     safe_answer_callback_query(c.id)
     safe_send_message(c.message.chat.id, text)
 
-
 # =====================================
-# EARN TASKS (admin-managed, unified) — accessed via Pul ishlash flow
+# EARN TASKS (enhanced)
 # =====================================
 def _incomplete_tasks(uid: str):
     done = users[uid].get("completed_earn_tasks", [])
     return [t for t in config.get("earn_tasks", []) if t["id"] not in done]
-
 
 @bot.message_handler(func=lambda m: m.text == "📋 Vazifalar")
 @subscription_required
@@ -1357,7 +1555,6 @@ def earn_tasks_entry(message):
         return
     show_earn_task(message.chat.id, tasks_left[0])
 
-
 def show_earn_task(chat_id: int, task: Dict[str, Any]):
     kind_label = "📢 Kanal" if task["type"] == "channel" else "👁 Post"
     action_label = "➕ Obuna bo'lish" if task["type"] == "channel" else "👁 Ko'rish"
@@ -1367,8 +1564,8 @@ def show_earn_task(chat_id: int, task: Dict[str, Any]):
         InlineKeyboardButton("✅ Tekshirish", callback_data=f"check_earn_{task['id']}"),
         InlineKeyboardButton("⏭ Keyingi", callback_data=f"skip_earn_{task['id']}"),
     )
+    safe_send_animation(chat_id, GIF_LOADING, caption="⏳ Vazifa yuklanmoqda...")
     safe_send_message(chat_id, f"{kind_label}: {task.get('title', '')}\n{task['link']}\n\n💰 Mukofot: {task.get('reward', 0):,} so'm", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("check_earn_"))
 @safe_callback_handler
@@ -1400,7 +1597,6 @@ def check_earn(c):
     else:
         safe_send_message(c.message.chat.id, "✅ Barcha topshiriqlar bajarildi")
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("skip_earn_"))
 @safe_callback_handler
 def skip_earn(c):
@@ -1413,9 +1609,7 @@ def skip_earn(c):
         return
     show_earn_task(c.message.chat.id, remaining[0])
 
-
 def unsubscribe_recheck_loop():
-    """Periodically re-check channel-type earn tasks; deduct penalty if user unsubscribed."""
     while True:
         time.sleep(6 * 3600)
         try:
@@ -1442,12 +1636,10 @@ def unsubscribe_recheck_loop():
         except Exception as e:
             logger.error(f"Unsubscribe recheck xato: {e}")
 
-
 threading.Thread(target=unsubscribe_recheck_loop, daemon=True).start()
 
-
 # =====================================
-# TOP-UP (manual card -> amount -> receipt -> payment channel)
+# TOP-UP (manual card)
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "➕ Hisobni to'ldirish")
 @subscription_required
@@ -1460,7 +1652,6 @@ def topup_balance(message):
     for card in cards:
         markup.add(InlineKeyboardButton(f"💳 {card.get('bank', '')} — {card.get('holder', '')}", callback_data=f"topup_card_{card['id']}"))
     safe_send_message(message.chat.id, "💳 To'lov qilish uchun kartani tanlang:", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("topup_card_"))
 @safe_callback_handler
@@ -1481,7 +1672,6 @@ def topup_card_selected(c):
     msg = safe_send_message(c.message.chat.id, "Summani kiriting:", reply_markup=back_menu())
     if msg:
         bot.register_next_step_handler(msg, process_topup_amount, card_id)
-
 
 @safe_next_step
 def process_topup_amount(message, card_id: int):
@@ -1506,7 +1696,6 @@ def process_topup_amount(message, card_id: int):
     msg = safe_send_message(message.chat.id, "🧾 Endi to'lov chekini (skrinshot) rasm ko'rinishida yuboring:", reply_markup=back_menu())
     if msg:
         bot.register_next_step_handler(msg, process_topup_receipt)
-
 
 @safe_next_step
 def process_topup_receipt(message):
@@ -1563,7 +1752,6 @@ def process_topup_receipt(message):
             except Exception as e:
                 logger.debug(f"Admin fallback xato ({admin_id}): {e}")
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("payadm_"))
 @safe_callback_handler
 def payadm_action(c):
@@ -1616,9 +1804,8 @@ def payadm_action(c):
         new_caption = (c.message.caption or "") + f"\n\n❌ Rad etildi: {order['rejected_by']}"
         safe_edit_message_caption(new_caption, c.message.chat.id, c.message.message_id, reply_markup=None)
 
-
 # =====================================
-# ADMIN: DIRECT TOP-UP (admin adds/removes balance instantly + logs to history)
+# ADMIN: DIRECT TOP-UP
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "💵 Hisob to'ldirish (admin)" and is_admin(m.from_user.id))
 @admin_required
@@ -1626,7 +1813,6 @@ def admin_direct_topup_entry(message):
     msg = safe_send_message(message.chat.id, "👤 Foydalanuvchi ID sini kiriting:", reply_markup=back_menu())
     if msg:
         bot.register_next_step_handler(msg, admin_direct_topup_userid)
-
 
 @safe_next_step
 def admin_direct_topup_userid(message):
@@ -1645,7 +1831,6 @@ def admin_direct_topup_userid(message):
     )
     if msg:
         bot.register_next_step_handler(msg, admin_direct_topup_amount, target_id)
-
 
 @safe_next_step
 def admin_direct_topup_amount(message, target_id: str):
@@ -1685,12 +1870,10 @@ def admin_direct_topup_amount(message, target_id: str):
         f"💰 Administrator balansingizni o'zgartirdi.\n{sign}{amount:,} so'm\n⚖️ Yangi balans: {users[target_id]['balance']:,} so'm",
     )
 
-
 # =====================================
-# SERVICES / SHOP (admin managed, with category CRUD)
+# SERVICES / SHOP
 # =====================================
 def _service_categories() -> List[str]:
-    """Returns category names — prefers explicit service_categories list, falls back to derived from services."""
     explicit = [c["name"] for c in config.get("service_categories", [])]
     if explicit:
         return explicit
@@ -1699,7 +1882,6 @@ def _service_categories() -> List[str]:
         if s["category"] not in cats:
             cats.append(s["category"])
     return cats
-
 
 @bot.message_handler(func=lambda m: m.text == "🛍 Xizmatlar")
 @subscription_required
@@ -1713,7 +1895,6 @@ def shop(message):
         markup.add(InlineKeyboardButton(f"📦 {cat}", callback_data=f"shopcat_{cat}"))
     safe_send_message(message.chat.id, "🛍 Do'kon bo'limi:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("shopcat_"))
 @safe_callback_handler
 def shop_category(c):
@@ -1726,10 +1907,7 @@ def shop_category(c):
     text = f"🛍 {category}"
     if not items:
         text += "\n\nHozircha bu kategoriyada mahsulot yo'q"
-    result = safe_edit_message_text(text, c.message.chat.id, c.message.message_id, reply_markup=markup)
-    if result is None:
-        safe_send_message(c.message.chat.id, text, reply_markup=markup)
-
+    safe_edit_message_text(text, c.message.chat.id, c.message.message_id, reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda c: c.data == "shop_back")
 @safe_callback_handler
@@ -1739,7 +1917,6 @@ def shop_back(c):
     for cat in cats:
         markup.add(InlineKeyboardButton(f"📦 {cat}", callback_data=f"shopcat_{cat}"))
     safe_edit_message_text("🛍 Do'kon bo'limi:", c.message.chat.id, c.message.message_id, reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("buyserv_"))
 @safe_callback_handler
@@ -1760,7 +1937,6 @@ def buy_service(c):
     msg = safe_send_message(c.message.chat.id, f"📝 {service['name']} uchun ID yoki username kiriting:{desc}")
     if msg:
         bot.register_next_step_handler(msg, process_purchase_id)
-
 
 @safe_next_step
 def process_purchase_id(message):
@@ -1809,9 +1985,8 @@ def process_purchase_id(message):
     )
     send_order_to_channel(caption, markup=kb)
 
-
 # =====================================
-# ORDERS (generic shop approve/reject) / ADMIN STATS
+# ORDERS / ADMIN STATS
 # =====================================
 def get_admin_stats() -> Dict[str, Any]:
     today = datetime.now().strftime("%Y-%m-%d")
@@ -1832,20 +2007,23 @@ def get_admin_stats() -> Dict[str, Any]:
         "house_edge_result": total_wagered - total_game_payout,
     }
 
-
 @bot.message_handler(func=lambda m: m.text == "👨‍💻 Admin panel" and is_admin(m.from_user.id))
 def admin_panel(message):
     try:
         s = get_admin_stats()
         safe_send_message(
             message.chat.id,
-            f"👨‍💻 <b>Admin panel</b>\n\n👥 Foydalanuvchilar: {s['total_users']}\n🆕 Bugun: {s['new_today']}\n⚡ Faol: {s['active_today']}\n💰 Jami balans: {s['total_balance']:,} so'm\n📦 Pending: {s['pending_orders']}",
+            f"👨‍💻 <b>Admin panel</b>\n\n"
+            f"👥 Foydalanuvchilar: {s['total_users']}\n"
+            f"🆕 Bugun: {s['new_today']}\n"
+            f"⚡ Faol: {s['active_today']}\n"
+            f"💰 Jami balans: {s['total_balance']:,} so'm\n"
+            f"📦 Pending: {s['pending_orders']}",
             reply_markup=admin_menu(),
         )
     except Exception as e:
         logger.error(f"admin_panel xato: {e}", exc_info=True)
         safe_send_message(message.chat.id, "⚠️ Xatolik yuz berdi.")
-
 
 def admin_as_user_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -1856,12 +2034,10 @@ def admin_as_user_menu():
     kb.add("👨‍💻 Admin panel")
     return kb
 
-
 @bot.message_handler(func=lambda m: m.text == "⬅️ Foydalanuvchi rejimi" and is_admin(m.from_user.id))
 @admin_required
 def switch_to_user_mode(message):
     safe_send_message(message.chat.id, "🔙 Foydalanuvchi rejimiga o'tdingiz", reply_markup=admin_as_user_menu())
-
 
 @bot.message_handler(func=lambda m: m.text == "📊 Statistika" and is_admin(m.from_user.id))
 @admin_required
@@ -1890,9 +2066,8 @@ def admin_stats(message):
         f"🏦 Bot foydasi (o'yinlardan): {s['house_edge_result']:,} so'm",
     )
 
-
 # =====================================
-# ADMIN: ORDERS (enhanced — filter by status/kind)
+# ADMIN: ORDERS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "📦 Buyurtmalar" and is_admin(m.from_user.id))
 @admin_required
@@ -1912,7 +2087,6 @@ def admin_orders(message):
     markup.add(InlineKeyboardButton("📋 Barchasi (oxirgi 20)", callback_data="ordf_all"))
     safe_send_message(message.chat.id, f"📦 <b>Buyurtmalar boshqaruvi</b>\n\nJami buyurtmalar: {len(orders)}\nFiltrni tanlang:", reply_markup=markup)
 
-
 def _render_orders_list(filtered: List[Dict[str, Any]], title: str):
     filtered = sorted(filtered, key=lambda x: x.get("date", ""), reverse=True)[:20]
     if not filtered:
@@ -1923,7 +2097,6 @@ def _render_orders_list(filtered: List[Dict[str, Any]], title: str):
         lines.append(f"\n#{order['id']} | {order.get('kind')} | {order.get('amount', 0):,} so'm | {order.get('status')} | user {order['user_id']}")
         markup.add(InlineKeyboardButton(f"Buyurtma #{order['id']}", callback_data=f"view_order_{order['id']}"))
     return "\n".join(lines), markup
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("ordf_"))
 @safe_callback_handler
@@ -1940,7 +2113,6 @@ def order_filter(c):
         text, markup = _render_orders_list([o for o in orders if o.get("status") == key], f"Buyurtmalar: {key}")
     safe_answer_callback_query(c.id)
     safe_send_message(c.message.chat.id, text, reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("view_order_"))
 @safe_callback_handler
@@ -1975,7 +2147,6 @@ def view_order(c):
     safe_answer_callback_query(c.id)
     safe_send_message(c.message.chat.id, text, reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("approve_order_"))
 @safe_callback_handler
 def approve_order(c):
@@ -2001,7 +2172,6 @@ def approve_order(c):
     if result is None:
         safe_edit_message_caption(f"✅ Buyurtma #{order_id} tasdiqlandi", c.message.chat.id, c.message.message_id)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("reject_order_"))
 @safe_callback_handler
 def reject_order(c):
@@ -2026,7 +2196,6 @@ def reject_order(c):
     if result is None:
         safe_edit_message_caption(f"❌ Buyurtma #{order_id} rad etildi", c.message.chat.id, c.message.message_id)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "set_orders_channel")
 @safe_callback_handler
 def set_orders_channel(c):
@@ -2035,7 +2204,6 @@ def set_orders_channel(c):
     msg = safe_send_message(c.message.chat.id, "📢 Buyurtmalar (shop) kanalidan istalgan xabarni forward qiling, yoki kanal ID sini yuboring. Bot shu kanalda admin bo'lishi shart.")
     if msg:
         bot.register_next_step_handler(msg, process_set_orders_channel)
-
 
 @safe_next_step
 def process_set_orders_channel(message):
@@ -2052,9 +2220,8 @@ def process_set_orders_channel(message):
     safe_send_message(chat_id, "✅ Bu kanal endi buyurtma so'rovlari uchun sozlandi.")
     safe_send_message(message.chat.id, "✅ Buyurtmalar kanali saqlandi", reply_markup=admin_menu())
 
-
 # =====================================
-# ADMIN: USERS (enhanced — full info + all actions)
+# ADMIN: USERS (enhanced)
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "👤 Foydalanuvchilar" and is_admin(m.from_user.id))
 @admin_required
@@ -2063,9 +2230,28 @@ def admin_users(message):
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     kb.add("🔍 Foydalanuvchi qidirish", "📋 So'nggi qo'shilganlar")
     kb.add("🚫 Bloklanganlar ro'yxati", "🏆 Eng faol userlar")
-    kb.add("⬅️ Ortga")
+    kb.add("📊 Referal statistikasi", "⬅️ Ortga")
     safe_send_message(message.chat.id, f"👤 Foydalanuvchilar bo'limi\n\n👥 Jami: {s['total_users']} | 🆕 Bugun: {s['new_today']} | 🚫 Bloklangan: {s['blocked_users']}", reply_markup=kb)
 
+@bot.message_handler(func=lambda m: m.text == "📊 Referal statistikasi" and is_admin(m.from_user.id))
+@admin_required
+def referral_stats(message):
+    stats = {}
+    for uid, u in users.items():
+        ref_by = u.get("referred_by")
+        if ref_by:
+            stats[ref_by] = stats.get(ref_by, 0) + 1
+    
+    if not stats:
+        safe_send_message(message.chat.id, "❌ Hozircha referal statistikasi mavjud emas", reply_markup=admin_menu())
+        return
+    
+    sorted_stats = sorted(stats.items(), key=lambda x: x[1], reverse=True)[:20]
+    text = "📊 <b>Referal statistikasi</b>\n\n"
+    for i, (uid, count) in enumerate(sorted_stats, 1):
+        text += f"{i}. {safe_username(uid)} — {count} ta referal\n"
+    
+    safe_send_message(message.chat.id, text, reply_markup=admin_menu())
 
 @bot.message_handler(func=lambda m: m.text == "🔍 Foydalanuvchi qidirish" and is_admin(m.from_user.id))
 @admin_required
@@ -2073,7 +2259,6 @@ def search_user(message):
     msg = safe_send_message(message.chat.id, "ID yoki username kiriting:", reply_markup=back_menu())
     if msg:
         bot.register_next_step_handler(msg, process_user_search)
-
 
 @safe_next_step
 def process_user_search(message):
@@ -2101,7 +2286,6 @@ def process_user_search(message):
         markup.add(InlineKeyboardButton(f"{safe_username(uid)} | {users[uid].get('balance', 0):,} so'm", callback_data=f"admin_show_user_{uid}"))
     safe_send_message(message.chat.id, "Topilgan foydalanuvchilar:", reply_markup=markup)
 
-
 @bot.message_handler(func=lambda m: m.text == "📋 So'nggi qo'shilganlar" and is_admin(m.from_user.id))
 @admin_required
 def recent_users(message):
@@ -2116,7 +2300,6 @@ def recent_users(message):
         markup.add(InlineKeyboardButton(f"{safe_username(uid)}", callback_data=f"admin_show_user_{uid}"))
     safe_send_message(message.chat.id, "\n".join(lines), reply_markup=markup)
 
-
 @bot.message_handler(func=lambda m: m.text == "🚫 Bloklanganlar ro'yxati" and is_admin(m.from_user.id))
 @admin_required
 def blocked_users_list(message):
@@ -2129,7 +2312,6 @@ def blocked_users_list(message):
         markup.add(InlineKeyboardButton(f"{safe_username(uid)}", callback_data=f"admin_show_user_{uid}"))
     safe_send_message(message.chat.id, f"🚫 Bloklangan foydalanuvchilar ({len(blocked)}):", reply_markup=markup)
 
-
 @bot.message_handler(func=lambda m: m.text == "🏆 Eng faol userlar" and is_admin(m.from_user.id))
 @admin_required
 def most_active_users(message):
@@ -2141,12 +2323,20 @@ def most_active_users(message):
         markup.add(InlineKeyboardButton(f"{safe_username(uid)}", callback_data=f"admin_show_user_{uid}"))
     safe_send_message(message.chat.id, "\n".join(lines), reply_markup=markup)
 
-
 def show_user_info(chat_id: int, user_id: str):
     if user_id not in users:
         safe_send_message(chat_id, "❌ Foydalanuvchi topilmadi")
         return
     user = users[user_id]
+    ref_list = user.get("referrals_list", [])
+    ref_text = ""
+    if ref_list:
+        ref_text = "\n\n👥 <b>Referallari:</b>\n"
+        for ref in ref_list[-5:]:
+            ref_text += f"• {ref.get('username', 'Noma\'lum')} - {ref.get('date', '')}\n"
+        if len(ref_list) > 5:
+            ref_text += f"... va yana {len(ref_list) - 5} ta"
+    
     text = (
         f"👤 <b>Foydalanuvchi</b>\n\n"
         f"ID: <code>{user_id}</code>\n"
@@ -2156,6 +2346,7 @@ def show_user_info(chat_id: int, user_id: str):
         f"⏱ Oxirgi faollik: {user.get('last_active', 'Noma\'lum')}\n\n"
         f"💰 Balans: {user.get('balance', 0):,} so'm\n"
         f"👥 Referallar: {user.get('referrals_count', 0)}\n"
+        f"🔰 Daraja: {get_referral_level(user.get('referrals_count', 0)).get('level')}\n"
         f"🔗 Kim taklif qilgan: {safe_username(user.get('referred_by')) if user.get('referred_by') else '—'}\n"
         f"📦 Buyurtmalar: {user.get('orders_count', 0)}\n"
         f"🎮 O'yinlar: {user.get('games_played', 0)} (yutgan: {user.get('games_won', 0)})\n"
@@ -2166,6 +2357,7 @@ def show_user_info(chat_id: int, user_id: str):
         f"🔔 Bildirishnoma: {'✅' if user.get('notifications', True) else '❌'}\n"
         f"🚫 Blocked: {'✅' if user.get('blocked') else '❌'}\n"
         f"👑 Admin: {'✅' if is_admin(int(user_id)) else '❌'}"
+        f"{ref_text}"
     )
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(InlineKeyboardButton("💰 Balansni o'zgartirish", callback_data=f"admin_edit_balance_{user_id}"))
@@ -2176,14 +2368,12 @@ def show_user_info(chat_id: int, user_id: str):
     markup.add(InlineKeyboardButton("🗑 Foydalanuvchini o'chirish", callback_data=f"admin_delete_user_{user_id}"))
     safe_send_message(chat_id, text, reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admin_show_user_"))
 @safe_callback_handler
 def admin_show_user(c):
     if not is_admin(c.from_user.id):
         return
     show_user_info(c.message.chat.id, c.data.split("_")[-1])
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admin_edit_balance_"))
 @safe_callback_handler
@@ -2197,7 +2387,6 @@ def admin_edit_balance(c):
     msg = safe_send_message(c.message.chat.id, f"Yangi balansni kiriting ({users[user_id].get('balance', 0):,}):")
     if msg:
         bot.register_next_step_handler(msg, lambda m: process_balance_edit(m, user_id))
-
 
 @safe_next_step
 def process_balance_edit(message, user_id: str):
@@ -2213,7 +2402,6 @@ def process_balance_edit(message, user_id: str):
     save_db()
     safe_send_message(message.chat.id, f"✅ O'zgartirildi: {old:,} -> {amount:,}", reply_markup=admin_menu())
     safe_send_message(int(user_id), f"💰 Admin balansingizni o'zgartirdi.\nEski: {old:,}\nYangi: {amount:,}")
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admin_toggle_block_"))
 @safe_callback_handler
@@ -2231,7 +2419,6 @@ def admin_toggle_block(c):
     safe_send_message(int(user_id), f"ℹ️ Siz {state}")
     show_user_info(c.message.chat.id, user_id)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admin_user_orders_"))
 @safe_callback_handler
 def admin_user_orders(c):
@@ -2248,7 +2435,6 @@ def admin_user_orders(c):
     safe_answer_callback_query(c.id)
     safe_send_message(c.message.chat.id, "\n".join(lines))
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admin_msg_user_"))
 @safe_callback_handler
 def admin_msg_user(c):
@@ -2258,7 +2444,6 @@ def admin_msg_user(c):
     msg = safe_send_message(c.message.chat.id, f"✉️ {safe_username(user_id)} ga yubormoqchi bo'lgan xabarni yozing:")
     if msg:
         bot.register_next_step_handler(msg, lambda m: send_admin_reply(m, user_id))
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admin_clear_ref_"))
 @safe_callback_handler
@@ -2270,10 +2455,11 @@ def admin_clear_ref(c):
         safe_answer_callback_query(c.id, "❌ Foydalanuvchi topilmadi")
         return
     users[user_id]["referred_by"] = None
+    users[user_id]["referrals_list"] = []
+    users[user_id]["referrals_count"] = 0
     save_db()
     safe_answer_callback_query(c.id, "✅ Referal tozalandi")
     show_user_info(c.message.chat.id, user_id)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admin_delete_user_"))
 @safe_callback_handler
@@ -2289,7 +2475,6 @@ def admin_delete_user_confirm(c):
     safe_call(bot.edit_message_reply_markup, c.message.chat.id, c.message.message_id, reply_markup=markup)
     safe_answer_callback_query(c.id, "⚠️ Tasdiqlang")
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admin_delete_confirm_"))
 @safe_callback_handler
 def admin_delete_user(c):
@@ -2302,9 +2487,8 @@ def admin_delete_user(c):
     safe_answer_callback_query(c.id, "✅ Foydalanuvchi o'chirildi")
     safe_edit_message_text(f"🗑 Foydalanuvchi <code>{user_id}</code> o'chirildi", c.message.chat.id, c.message.message_id)
 
-
 # =====================================
-# ADMIN: PAYMENT CARDS (enhanced)
+# ADMIN: PAYMENT CARDS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "💳 To'lov (kartalar)" and is_admin(m.from_user.id))
 @admin_required
@@ -2330,7 +2514,6 @@ def manage_cards(message):
     markup.add(InlineKeyboardButton("💵 Minimal summani sozlash", callback_data="set_min_topup"))
     safe_send_message(message.chat.id, "\n".join(text), reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "add_card")
 @safe_callback_handler
 def add_card(c):
@@ -2340,14 +2523,12 @@ def add_card(c):
     if msg:
         bot.register_next_step_handler(msg, process_add_card_number)
 
-
 @safe_next_step
 def process_add_card_number(message):
     number = message.text.strip()
     msg = safe_send_message(message.chat.id, "🏦 Bank nomini kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_add_card_bank, number)
-
 
 @safe_next_step
 def process_add_card_bank(message, number: str):
@@ -2356,7 +2537,6 @@ def process_add_card_bank(message, number: str):
     if msg:
         bot.register_next_step_handler(msg, process_add_card_holder, number, bank)
 
-
 @safe_next_step
 def process_add_card_holder(message, number: str, bank: str):
     holder = message.text.strip()
@@ -2364,7 +2544,6 @@ def process_add_card_holder(message, number: str, bank: str):
     cards.append({"id": new_id(cards), "number": number, "bank": bank, "holder": holder})
     save_db()
     safe_send_message(message.chat.id, "✅ Karta qo'shildi", reply_markup=admin_menu())
-
 
 @bot.callback_query_handler(func=lambda c: c.data == "edit_card")
 @safe_callback_handler
@@ -2377,7 +2556,6 @@ def edit_card(c):
         markup.add(InlineKeyboardButton(f"{card['bank']} — {card['number']}", callback_data=f"editcard_{card['id']}"))
     safe_send_message(c.message.chat.id, "Tahrirlash uchun tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("editcard_"))
 @safe_callback_handler
 def editcard_pick(c):
@@ -2388,7 +2566,6 @@ def editcard_pick(c):
     if msg:
         bot.register_next_step_handler(msg, process_editcard_number, card_id)
 
-
 @safe_next_step
 def process_editcard_number(message, card_id: int):
     number = message.text.strip()
@@ -2396,14 +2573,12 @@ def process_editcard_number(message, card_id: int):
     if msg:
         bot.register_next_step_handler(msg, process_editcard_bank, card_id, number)
 
-
 @safe_next_step
 def process_editcard_bank(message, card_id: int, number: str):
     bank = message.text.strip()
     msg = safe_send_message(message.chat.id, "Yangi karta egasi ismini kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_editcard_holder, card_id, number, bank)
-
 
 @safe_next_step
 def process_editcard_holder(message, card_id: int, number: str, bank: str):
@@ -2413,7 +2588,6 @@ def process_editcard_holder(message, card_id: int, number: str, bank: str):
             c_.update({"number": number, "bank": bank, "holder": holder})
     save_db()
     safe_send_message(message.chat.id, "✅ Karta yangilandi", reply_markup=admin_menu())
-
 
 @bot.callback_query_handler(func=lambda c: c.data == "remove_card")
 @safe_callback_handler
@@ -2426,7 +2600,6 @@ def remove_card(c):
         markup.add(InlineKeyboardButton(f"{card['bank']} — {card['number']}", callback_data=f"delete_card_{card['id']}"))
     safe_send_message(c.message.chat.id, "O'chirish uchun tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("delete_card_"))
 @safe_callback_handler
 def delete_card(c):
@@ -2437,7 +2610,6 @@ def delete_card(c):
     save_db()
     safe_answer_callback_query(c.id, "✅ O'chirildi")
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "set_payment_channel")
 @safe_callback_handler
 def set_payment_channel(c):
@@ -2446,7 +2618,6 @@ def set_payment_channel(c):
     msg = safe_send_message(c.message.chat.id, "📢 To'lov kanalidan istalgan xabarni forward qiling, yoki kanal ID sini yuboring (masalan -1001234567890). Bot shu kanalda admin bo'lishi shart.")
     if msg:
         bot.register_next_step_handler(msg, process_set_payment_channel)
-
 
 @safe_next_step
 def process_set_payment_channel(message):
@@ -2463,7 +2634,6 @@ def process_set_payment_channel(message):
     safe_send_message(chat_id, "✅ Bu kanal endi to'lov so'rovlari uchun sozlandi.")
     safe_send_message(message.chat.id, "✅ To'lov kanali saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "set_min_topup")
 @safe_callback_handler
 def set_min_topup(c):
@@ -2472,7 +2642,6 @@ def set_min_topup(c):
     msg = safe_send_message(c.message.chat.id, "💵 Minimal to'ldirish summasini kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_set_min_topup)
-
 
 @safe_next_step
 def process_set_min_topup(message):
@@ -2484,9 +2653,8 @@ def process_set_min_topup(message):
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 # =====================================
-# ADMIN: SERVICES (categories CRUD + products CRUD)
+# ADMIN: SERVICES
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "🛠 Xizmatlar" and is_admin(m.from_user.id))
 @admin_required
@@ -2509,7 +2677,6 @@ def manage_services(message):
         markup.add(InlineKeyboardButton("📦 Mahsulotlarni boshqarish", callback_data="manage_products"))
     safe_send_message(message.chat.id, "\n".join(text), reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "add_category")
 @safe_callback_handler
 def add_category(c):
@@ -2518,7 +2685,6 @@ def add_category(c):
     msg = safe_send_message(c.message.chat.id, "📦 Yangi kategoriya nomini kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_add_category)
-
 
 @safe_next_step
 def process_add_category(message):
@@ -2531,7 +2697,6 @@ def process_add_category(message):
     save_db()
     safe_send_message(message.chat.id, "✅ Kategoriya qo'shildi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "edit_category")
 @safe_callback_handler
 def edit_category(c):
@@ -2543,7 +2708,6 @@ def edit_category(c):
         markup.add(InlineKeyboardButton(cat["name"], callback_data=f"editcat_{cat['id']}"))
     safe_send_message(c.message.chat.id, "Tahrirlash uchun tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("editcat_"))
 @safe_callback_handler
 def editcat_pick(c):
@@ -2553,7 +2717,6 @@ def editcat_pick(c):
     msg = safe_send_message(c.message.chat.id, "Yangi kategoriya nomini kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_editcat, cat_id)
-
 
 @safe_next_step
 def process_editcat(message, cat_id: int):
@@ -2571,7 +2734,6 @@ def process_editcat(message, cat_id: int):
     save_db()
     safe_send_message(message.chat.id, "✅ Kategoriya yangilandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "remove_category")
 @safe_callback_handler
 def remove_category(c):
@@ -2582,7 +2744,6 @@ def remove_category(c):
     for cat in cats:
         markup.add(InlineKeyboardButton(cat["name"], callback_data=f"delcat_{cat['id']}"))
     safe_send_message(c.message.chat.id, "O'chirish uchun tanlang (mahsulotlar ham o'chadi):", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("delcat_"))
 @safe_callback_handler
@@ -2598,7 +2759,6 @@ def delcat(c):
         save_db()
     safe_answer_callback_query(c.id, "✅ O'chirildi")
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "manage_products")
 @safe_callback_handler
 def manage_products(c):
@@ -2609,7 +2769,6 @@ def manage_products(c):
     for cat in cats:
         markup.add(InlineKeyboardButton(f"📦 {cat['name']}", callback_data=f"prodcat_{cat['name']}"))
     safe_send_message(c.message.chat.id, "Qaysi kategoriya mahsulotlarini boshqarasiz?", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("prodcat_"))
 @safe_callback_handler
@@ -2631,7 +2790,6 @@ def prodcat_view(c):
         markup.add(InlineKeyboardButton("❌ Mahsulotni o'chirish", callback_data=f"delprodmenu_{category}"))
     safe_send_message(c.message.chat.id, "\n".join(text), reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("addprod_"))
 @safe_callback_handler
 def add_service(c):
@@ -2642,14 +2800,12 @@ def add_service(c):
     if msg:
         bot.register_next_step_handler(msg, process_add_service_name, category)
 
-
 @safe_next_step
 def process_add_service_name(message, category: str):
     name = message.text.strip()
     msg = safe_send_message(message.chat.id, "💰 Narxini kiriting (so'm):")
     if msg:
         bot.register_next_step_handler(msg, process_add_service_price, category, name)
-
 
 @safe_next_step
 def process_add_service_price(message, category: str, name: str):
@@ -2660,7 +2816,6 @@ def process_add_service_price(message, category: str, name: str):
     msg = safe_send_message(message.chat.id, "📝 Qo'shimcha izoh kiriting (ixtiyoriy, o'tkazib yuborish uchun '-' yozing):")
     if msg:
         bot.register_next_step_handler(msg, process_add_service_desc, category, name, price)
-
 
 @safe_next_step
 def process_add_service_desc(message, category: str, name: str, price: int):
@@ -2674,7 +2829,6 @@ def process_add_service_desc(message, category: str, name: str, price: int):
     save_db()
     safe_send_message(message.chat.id, "✅ Mahsulot qo'shildi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("editprodmenu_"))
 @safe_callback_handler
 def editprodmenu(c):
@@ -2687,7 +2841,6 @@ def editprodmenu(c):
         markup.add(InlineKeyboardButton(f"{s['name']} ({s['price']:,})", callback_data=f"editprice_{s['id']}"))
     safe_send_message(c.message.chat.id, "Tahrirlash uchun tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("editprice_"))
 @safe_callback_handler
 def editprice(c):
@@ -2698,14 +2851,12 @@ def editprice(c):
     if msg:
         bot.register_next_step_handler(msg, process_editname, service_id)
 
-
 @safe_next_step
 def process_editname(message, service_id: int):
     name = message.text.strip()
     msg = safe_send_message(message.chat.id, "💰 Yangi narxni kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_editprice, service_id, name)
-
 
 @safe_next_step
 def process_editprice(message, service_id: int, name: str):
@@ -2721,7 +2872,6 @@ def process_editprice(message, service_id: int, name: str):
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("delprodmenu_"))
 @safe_callback_handler
 def delprodmenu(c):
@@ -2734,7 +2884,6 @@ def delprodmenu(c):
         markup.add(InlineKeyboardButton(f"{s['name']}", callback_data=f"delservice_{s['id']}"))
     safe_send_message(c.message.chat.id, "O'chirish uchun tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("delservice_"))
 @safe_callback_handler
 def delservice(c):
@@ -2745,9 +2894,8 @@ def delservice(c):
     save_db()
     safe_answer_callback_query(c.id, "✅ O'chirildi")
 
-
 # =====================================
-# ADMIN: REQUIRED CHANNELS (enhanced — shows progress toward auto-remove)
+# ADMIN: REQUIRED CHANNELS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "📝 Majburiy kanallar" and is_admin(m.from_user.id))
 @admin_required
@@ -2774,7 +2922,6 @@ def manage_required_channels(message):
         markup.add(InlineKeyboardButton("🔄 Hisoblagichni nolga tushirish", callback_data="reset_channel_count"))
     safe_send_message(message.chat.id, "\n".join(lines), reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "add_required_channel")
 @safe_callback_handler
 def add_required_channel(c):
@@ -2783,7 +2930,6 @@ def add_required_channel(c):
     msg = safe_send_message(c.message.chat.id, "Format: @username - Title")
     if msg:
         bot.register_next_step_handler(msg, process_add_required_channel)
-
 
 @safe_next_step
 def process_add_required_channel(message):
@@ -2799,7 +2945,6 @@ def process_add_required_channel(message):
     save_db()
     safe_send_message(message.chat.id, "✅ Qo'shildi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "edit_required_channel")
 @safe_callback_handler
 def edit_required_channel(c):
@@ -2811,7 +2956,6 @@ def edit_required_channel(c):
         markup.add(InlineKeyboardButton(f"{ch['title']}", callback_data=f"editreqch_{i}"))
     safe_send_message(c.message.chat.id, "Tahrirlash uchun tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("editreqch_"))
 @safe_callback_handler
 def editreqch_pick(c):
@@ -2821,7 +2965,6 @@ def editreqch_pick(c):
     msg = safe_send_message(c.message.chat.id, "Yangi format: @username - Title")
     if msg:
         bot.register_next_step_handler(msg, process_editreqch, idx)
-
 
 @safe_next_step
 def process_editreqch(message, idx: int):
@@ -2840,7 +2983,6 @@ def process_editreqch(message, idx: int):
         save_db()
     safe_send_message(message.chat.id, "✅ Yangilandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "remove_required_channel")
 @safe_callback_handler
 def remove_required_channel(c):
@@ -2851,7 +2993,6 @@ def remove_required_channel(c):
     for i, ch in enumerate(required):
         markup.add(InlineKeyboardButton(f"{ch['title']}", callback_data=f"delreqch_{i}"))
     safe_send_message(c.message.chat.id, "O'chirish uchun tanlang:", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("delreqch_"))
 @safe_callback_handler
@@ -2866,7 +3007,6 @@ def delreqch(c):
         save_db()
     safe_answer_callback_query(c.id, "✅ O'chirildi")
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "set_autoremove")
 @safe_callback_handler
 def set_autoremove(c):
@@ -2878,7 +3018,6 @@ def set_autoremove(c):
         markup.add(InlineKeyboardButton(f"{ch['title']}", callback_data=f"autoremove_{i}"))
     safe_send_message(c.message.chat.id, "Qaysi kanal uchun limit belgilaysiz?", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("autoremove_"))
 @safe_callback_handler
 def autoremove_pick(c):
@@ -2888,7 +3027,6 @@ def autoremove_pick(c):
     msg = safe_send_message(c.message.chat.id, "Nechta tasdiqlangan obunachidan keyin kanal avtomatik o'chirilsin? (0 = cheksiz):")
     if msg:
         bot.register_next_step_handler(msg, process_autoremove, idx)
-
 
 @safe_next_step
 def process_autoremove(message, idx: int):
@@ -2902,7 +3040,6 @@ def process_autoremove(message, idx: int):
         save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "reset_channel_count")
 @safe_callback_handler
 def reset_channel_count(c):
@@ -2913,7 +3050,6 @@ def reset_channel_count(c):
     for i, ch in enumerate(required):
         markup.add(InlineKeyboardButton(f"{ch['title']}", callback_data=f"resetcount_{i}"))
     safe_send_message(c.message.chat.id, "Qaysi kanal hisoblagichini nollaymiz?", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("resetcount_"))
 @safe_callback_handler
@@ -2927,9 +3063,8 @@ def resetcount(c):
         save_db()
     safe_answer_callback_query(c.id, "✅ Nollandi")
 
-
 # =====================================
-# ADMIN: EARN TASKS (enhanced)
+# ADMIN: EARN TASKS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "💼 Pul ishlash vazifalari" and is_admin(m.from_user.id))
 @admin_required
@@ -2948,7 +3083,6 @@ def manage_earn_tasks(message):
         markup.add(InlineKeyboardButton("❌ Vazifani o'chirish", callback_data="remove_earn_task"))
     safe_send_message(message.chat.id, "\n".join(lines), reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "add_earn_task")
 @safe_callback_handler
 def add_earn_task(c):
@@ -2961,7 +3095,6 @@ def add_earn_task(c):
     )
     safe_send_message(c.message.chat.id, "Vazifa turini tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("earntype_"))
 @safe_callback_handler
 def earntype_pick(c):
@@ -2972,7 +3105,6 @@ def earntype_pick(c):
     if msg:
         bot.register_next_step_handler(msg, process_earn_title, task_type)
 
-
 @safe_next_step
 def process_earn_title(message, task_type: str):
     title = message.text.strip()
@@ -2980,14 +3112,12 @@ def process_earn_title(message, task_type: str):
     if msg:
         bot.register_next_step_handler(msg, process_earn_link, task_type, title)
 
-
 @safe_next_step
 def process_earn_link(message, task_type: str, title: str):
     link = message.text.strip()
     msg = safe_send_message(message.chat.id, "💰 Mukofot summasini kiriting (bajarganda beriladi):")
     if msg:
         bot.register_next_step_handler(msg, process_earn_reward, task_type, title, link)
-
 
 @safe_next_step
 def process_earn_reward(message, task_type: str, title: str, link: str):
@@ -2998,7 +3128,6 @@ def process_earn_reward(message, task_type: str, title: str, link: str):
     msg = safe_send_message(message.chat.id, "⚠️ Agar kanal bo'lsa: keyinchalik obunadan chiqib ketsa qancha balansdan ayiriladi? (0 = ayirilmasin):")
     if msg:
         bot.register_next_step_handler(msg, process_earn_penalty, task_type, title, link, reward)
-
 
 @safe_next_step
 def process_earn_penalty(message, task_type: str, title: str, link: str, reward: int):
@@ -3011,7 +3140,6 @@ def process_earn_penalty(message, task_type: str, title: str, link: str, reward:
     save_db()
     safe_send_message(message.chat.id, "✅ Vazifa qo'shildi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "edit_earn_task")
 @safe_callback_handler
 def edit_earn_task(c):
@@ -3023,7 +3151,6 @@ def edit_earn_task(c):
         markup.add(InlineKeyboardButton(f"{t.get('title','')}", callback_data=f"editearn_{t['id']}"))
     safe_send_message(c.message.chat.id, "Tahrirlash uchun tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("editearn_"))
 @safe_callback_handler
 def editearn_pick(c):
@@ -3033,7 +3160,6 @@ def editearn_pick(c):
     msg = safe_send_message(c.message.chat.id, "Yangi mukofot summasini kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_edit_earn_reward, task_id)
-
 
 @safe_next_step
 def process_edit_earn_reward(message, task_id: int):
@@ -3047,7 +3173,6 @@ def process_edit_earn_reward(message, task_id: int):
     save_db()
     safe_send_message(message.chat.id, "✅ Yangilandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "remove_earn_task")
 @safe_callback_handler
 def remove_earn_task(c):
@@ -3059,7 +3184,6 @@ def remove_earn_task(c):
         markup.add(InlineKeyboardButton(f"{t.get('title','')}", callback_data=f"delearntask_{t['id']}"))
     safe_send_message(c.message.chat.id, "O'chirish uchun tanlang:", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("delearntask_"))
 @safe_callback_handler
 def delearntask(c):
@@ -3070,9 +3194,8 @@ def delearntask(c):
     save_db()
     safe_answer_callback_query(c.id, "✅ O'chirildi")
 
-
 # =====================================
-# ADMIN: PROMO CODES (enhanced — with usage limits)
+# ADMIN: PROMO CODES
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "🎟 Promokodlar" and is_admin(m.from_user.id))
 @admin_required
@@ -3097,7 +3220,6 @@ def manage_promo(message):
         markup.add(InlineKeyboardButton("❌ O'chirish", callback_data="remove_promo"))
     safe_send_message(message.chat.id, "\n".join(lines), reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "add_promo")
 @safe_callback_handler
 def add_promo(c):
@@ -3106,7 +3228,6 @@ def add_promo(c):
     msg = safe_send_message(c.message.chat.id, "Format: KOD - summa (masalan: BONUS100 - 100)")
     if msg:
         bot.register_next_step_handler(msg, process_add_promo)
-
 
 @safe_next_step
 def process_add_promo(message):
@@ -3123,7 +3244,6 @@ def process_add_promo(message):
     save_db()
     safe_send_message(message.chat.id, "✅ Promokod qo'shildi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "set_promo_limit")
 @safe_callback_handler
 def set_promo_limit(c):
@@ -3134,7 +3254,6 @@ def set_promo_limit(c):
         markup.add(InlineKeyboardButton(code, callback_data=f"promolimit_{code}"))
     safe_send_message(c.message.chat.id, "Qaysi promokod uchun limit belgilaysiz?", reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("promolimit_"))
 @safe_callback_handler
 def promolimit_pick(c):
@@ -3144,7 +3263,6 @@ def promolimit_pick(c):
     msg = safe_send_message(c.message.chat.id, "Nechta marta ishlatilishi mumkinligini kiriting (0 = cheksiz):")
     if msg:
         bot.register_next_step_handler(msg, process_promolimit, code)
-
 
 @safe_next_step
 def process_promolimit(message, code: str):
@@ -3159,7 +3277,6 @@ def process_promolimit(message, code: str):
     save_db()
     safe_send_message(message.chat.id, "✅ Limit saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "remove_promo")
 @safe_callback_handler
 def remove_promo(c):
@@ -3169,7 +3286,6 @@ def remove_promo(c):
     for code in promo_codes:
         markup.add(InlineKeyboardButton(code, callback_data=f"delpromo_{code}"))
     safe_send_message(c.message.chat.id, "O'chirish uchun tanlang:", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("delpromo_"))
 @safe_callback_handler
@@ -3182,9 +3298,8 @@ def delpromo(c):
     save_db()
     safe_answer_callback_query(c.id, "✅ O'chirildi")
 
-
 # =====================================
-# ADMIN: MINI-GAMES SETTINGS (win-chance / multiplier / bet limits / on-off)
+# ADMIN: MINI-GAMES SETTINGS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "🎮 Mini-o'yinlar sozlamalari" and is_admin(m.from_user.id))
 @admin_required
@@ -3202,7 +3317,6 @@ def manage_games(message):
         )
         markup.add(InlineKeyboardButton(f"⚙️ {g['name']} sozlash", callback_data=f"gamecfg_{key}"))
     safe_send_message(message.chat.id, "\n".join(lines), reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("gamecfg_"))
 @safe_callback_handler
@@ -3228,7 +3342,6 @@ def gamecfg(c):
         reply_markup=markup,
     )
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("gset_toggle_"))
 @safe_callback_handler
 def gset_toggle(c):
@@ -3239,7 +3352,6 @@ def gset_toggle(c):
     save_db()
     safe_answer_callback_query(c.id, "✅ Holat o'zgartirildi")
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("gset_chance_"))
 @safe_callback_handler
 def gset_chance(c):
@@ -3249,7 +3361,6 @@ def gset_chance(c):
     msg = safe_send_message(c.message.chat.id, "Yutish ehtimolini foizda kiriting (0-100):")
     if msg:
         bot.register_next_step_handler(msg, process_gset_chance, key)
-
 
 @safe_next_step
 def process_gset_chance(message, key: str):
@@ -3262,7 +3373,6 @@ def process_gset_chance(message, key: str):
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("gset_mult_"))
 @safe_callback_handler
 def gset_mult(c):
@@ -3272,7 +3382,6 @@ def gset_mult(c):
     msg = safe_send_message(c.message.chat.id, "Yangi koeffitsiyentni kiriting (masalan 2.5):")
     if msg:
         bot.register_next_step_handler(msg, process_gset_mult, key)
-
 
 @safe_next_step
 def process_gset_mult(message, key: str):
@@ -3284,7 +3393,6 @@ def process_gset_mult(message, key: str):
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("gset_min_"))
 @safe_callback_handler
 def gset_min(c):
@@ -3294,7 +3402,6 @@ def gset_min(c):
     msg = safe_send_message(c.message.chat.id, "Yangi minimal stavkani kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_gset_min, key)
-
 
 @safe_next_step
 def process_gset_min(message, key: str):
@@ -3306,7 +3413,6 @@ def process_gset_min(message, key: str):
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("gset_max_"))
 @safe_callback_handler
 def gset_max(c):
@@ -3316,7 +3422,6 @@ def gset_max(c):
     msg = safe_send_message(c.message.chat.id, "Yangi maksimal stavkani kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_gset_max, key)
-
 
 @safe_next_step
 def process_gset_max(message, key: str):
@@ -3328,27 +3433,104 @@ def process_gset_max(message, key: str):
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 # =====================================
 # ADMIN: REFERRAL / BONUS SETTINGS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "💰 Referal/Bonuslar" and is_admin(m.from_user.id))
 @admin_required
 def referral_settings(message):
+    levels = config.get("referral_levels", DEFAULT_CONFIG["referral_levels"])
+    level_text = "\n".join([f"🔹 {l.get('level')}-daraja: {l.get('required')}+ referal → {l.get('bonus'):,} so'm" for l in levels])
+    
     text = (
         f"💰 <b>Referal va bonus sozlamalari</b>\n\n"
         f"👥 Referal bonusi: {int(config.get('referral_bonus', 1000)):,} so'm\n"
         f"🎁 Ro'yxatdan o'tish bonusi: {int(config.get('welcome_bonus', 100)):,} so'm\n"
         f"✅ Obuna bonusi: {int(config.get('subscribe_bonus', 200)):,} so'm\n"
-        f"📅 Kunlik bonus: {config.get('daily_bonus_range', [100,500])[0]:,} - {config.get('daily_bonus_range', [100,500])[1]:,} so'm"
+        f"📅 Kunlik bonus: {config.get('daily_bonus_range', [100,500])[0]:,} - {config.get('daily_bonus_range', [100,500])[1]:,} so'm\n\n"
+        f"📊 <b>Referal darajalari:</b>\n{level_text}"
     )
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(InlineKeyboardButton("👥 Referal bonusini o'zgartirish", callback_data="edit_ref_bonus"))
     markup.add(InlineKeyboardButton("🎁 Ro'yxat bonusini o'zgartirish", callback_data="edit_welcome_bonus"))
     markup.add(InlineKeyboardButton("✅ Obuna bonusini o'zgartirish", callback_data="edit_subscribe_bonus"))
     markup.add(InlineKeyboardButton("📅 Kunlik bonusni o'zgartirish", callback_data="edit_daily_bonus"))
+    markup.add(InlineKeyboardButton("📊 Referal darajalarini boshqarish", callback_data="manage_referral_levels"))
     safe_send_message(message.chat.id, text, reply_markup=markup)
 
+@bot.callback_query_handler(func=lambda c: c.data == "manage_referral_levels")
+@safe_callback_handler
+def manage_referral_levels(c):
+    if not is_admin(c.from_user.id):
+        return
+    levels = config.get("referral_levels", DEFAULT_CONFIG["referral_levels"])
+    markup = InlineKeyboardMarkup(row_width=1)
+    for level in levels:
+        markup.add(InlineKeyboardButton(f"🔹 {level.get('level')}-daraja", callback_data=f"edit_level_{level.get('level')}"))
+    markup.add(InlineKeyboardButton("➕ Yangi daraja qo'shish", callback_data="add_level"))
+    safe_send_message(c.message.chat.id, "📊 Referal darajalarini boshqarish:", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("edit_level_"))
+@safe_callback_handler
+def edit_level(c):
+    if not is_admin(c.from_user.id):
+        return
+    level_num = int(c.data.split("_")[-1])
+    msg = safe_send_message(c.message.chat.id, f"🔹 {level_num}-daraja uchun yangi bonus va talabni kiriting (format: bonus - talab, masalan 2000 - 5):")
+    if msg:
+        bot.register_next_step_handler(msg, process_edit_level, level_num)
+
+@safe_next_step
+def process_edit_level(message, level_num: int):
+    try:
+        parts = message.text.strip().split(" - ")
+        if len(parts) != 2:
+            safe_send_message(message.chat.id, "❌ Format noto'g'ri", reply_markup=admin_menu())
+            return
+        bonus = safe_int(parts[0], default=None)
+        required = safe_int(parts[1], default=None)
+        if bonus is None or required is None:
+            safe_send_message(message.chat.id, "❌ Son kiriting", reply_markup=admin_menu())
+            return
+        levels = config.get("referral_levels", [])
+        for level in levels:
+            if level.get("level") == level_num:
+                level["bonus"] = bonus
+                level["required"] = required
+                break
+        save_db()
+        safe_send_message(message.chat.id, "✅ Yangilandi", reply_markup=admin_menu())
+    except Exception as e:
+        safe_send_message(message.chat.id, f"❌ Xato: {e}", reply_markup=admin_menu())
+
+@bot.callback_query_handler(func=lambda c: c.data == "add_level")
+@safe_callback_handler
+def add_level(c):
+    if not is_admin(c.from_user.id):
+        return
+    msg = safe_send_message(c.message.chat.id, "🔹 Yangi daraja uchun bonus va talabni kiriting (format: bonus - talab, masalan 5000 - 20):")
+    if msg:
+        bot.register_next_step_handler(msg, process_add_level)
+
+@safe_next_step
+def process_add_level(message):
+    try:
+        parts = message.text.strip().split(" - ")
+        if len(parts) != 2:
+            safe_send_message(message.chat.id, "❌ Format noto'g'ri", reply_markup=admin_menu())
+            return
+        bonus = safe_int(parts[0], default=None)
+        required = safe_int(parts[1], default=None)
+        if bonus is None or required is None:
+            safe_send_message(message.chat.id, "❌ Son kiriting", reply_markup=admin_menu())
+            return
+        levels = config.get("referral_levels", [])
+        new_level = max([l.get("level", 0) for l in levels]) + 1 if levels else 1
+        levels.append({"level": new_level, "bonus": bonus, "required": required})
+        save_db()
+        safe_send_message(message.chat.id, f"✅ {new_level}-daraja qo'shildi", reply_markup=admin_menu())
+    except Exception as e:
+        safe_send_message(message.chat.id, f"❌ Xato: {e}", reply_markup=admin_menu())
 
 @bot.callback_query_handler(func=lambda c: c.data == "edit_ref_bonus")
 @safe_callback_handler
@@ -3359,7 +3541,6 @@ def edit_ref_bonus(c):
     if msg:
         bot.register_next_step_handler(msg, lambda m: process_simple_config_int(m, "referral_bonus"))
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "edit_welcome_bonus")
 @safe_callback_handler
 def edit_welcome_bonus(c):
@@ -3369,7 +3550,6 @@ def edit_welcome_bonus(c):
     if msg:
         bot.register_next_step_handler(msg, lambda m: process_simple_config_int(m, "welcome_bonus"))
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "edit_subscribe_bonus")
 @safe_callback_handler
 def edit_subscribe_bonus(c):
@@ -3378,7 +3558,6 @@ def edit_subscribe_bonus(c):
     msg = safe_send_message(c.message.chat.id, "Yangi obuna bonusini kiriting:")
     if msg:
         bot.register_next_step_handler(msg, lambda m: process_simple_config_int(m, "subscribe_bonus"))
-
 
 @safe_next_step
 def process_simple_config_int(message, key: str):
@@ -3390,7 +3569,6 @@ def process_simple_config_int(message, key: str):
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "edit_daily_bonus")
 @safe_callback_handler
 def edit_daily_bonus(c):
@@ -3399,7 +3577,6 @@ def edit_daily_bonus(c):
     msg = safe_send_message(c.message.chat.id, "Min va max qiymatlarni kiriting (masalan: 100 500):")
     if msg:
         bot.register_next_step_handler(msg, process_edit_daily_bonus)
-
 
 @safe_next_step
 def process_edit_daily_bonus(message):
@@ -3416,9 +3593,8 @@ def process_edit_daily_bonus(message):
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 # =====================================
-# ADMIN: TEXTS (Matnlar)
+# ADMIN: TEXTS
 # =====================================
 EDITABLE_TEXT_KEYS = {
     "welcome": "Xush kelibsiz xabari",
@@ -3427,7 +3603,6 @@ EDITABLE_TEXT_KEYS = {
     "join_chat_prompt": "Chatga qo'shilish taklif xabari",
 }
 
-
 @bot.message_handler(func=lambda m: m.text == "✉️ Matnlar" and is_admin(m.from_user.id))
 @admin_required
 def manage_texts(message):
@@ -3435,7 +3610,6 @@ def manage_texts(message):
     for key, label in EDITABLE_TEXT_KEYS.items():
         markup.add(InlineKeyboardButton(f"✏️ {label}", callback_data=f"edittext_{key}"))
     safe_send_message(message.chat.id, "✉️ Tahrirlash uchun matnni tanlang:", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("edittext_"))
 @safe_callback_handler
@@ -3448,16 +3622,14 @@ def edittext(c):
     if msg:
         bot.register_next_step_handler(msg, process_edittext, key)
 
-
 @safe_next_step
 def process_edittext(message, key: str):
     config.setdefault("messages", {})[key] = message.text
     save_db()
     safe_send_message(message.chat.id, "✅ Saqlandi", reply_markup=admin_menu())
 
-
 # =====================================
-# ADMIN: MANAGE ADMINS (superadmin only)
+# ADMIN: MANAGE ADMINS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "👨‍💻 Adminlar" and is_admin(m.from_user.id))
 @admin_required
@@ -3471,7 +3643,6 @@ def manage_admins(message):
         markup.add(InlineKeyboardButton("❌ Adminni o'chirish", callback_data="remove_admin"))
     safe_send_message(message.chat.id, "\n".join(lines), reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "add_admin")
 @safe_callback_handler
 def add_admin(c):
@@ -3481,7 +3652,6 @@ def add_admin(c):
     msg = safe_send_message(c.message.chat.id, "Yangi admin ID sini kiriting:")
     if msg:
         bot.register_next_step_handler(msg, process_add_admin)
-
 
 @safe_next_step
 def process_add_admin(message):
@@ -3498,7 +3668,6 @@ def process_add_admin(message):
     safe_send_message(message.chat.id, f"✅ {username} admin qilib qo'shildi", reply_markup=admin_menu())
     safe_send_message(int(new_admin_id), "🎉 Siz botga admin etib tayinlandingiz!")
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "remove_admin")
 @safe_callback_handler
 def remove_admin(c):
@@ -3511,7 +3680,6 @@ def remove_admin(c):
             continue
         markup.add(InlineKeyboardButton(f"{info.get('username','')} ({uid})", callback_data=f"deladmin_{uid}"))
     safe_send_message(c.message.chat.id, "O'chirish uchun tanlang:", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("deladmin_"))
 @safe_callback_handler
@@ -3526,11 +3694,57 @@ def deladmin(c):
     else:
         safe_answer_callback_query(c.id, "❌ Bo'lmaydi")
 
+# =====================================
+# ADMIN: SYSTEM SETTINGS
+# =====================================
+@bot.message_handler(func=lambda m: m.text == "🔧 Tizim sozlamalari" and is_admin(m.from_user.id))
+@admin_required
+def system_settings(message):
+    maintenance = "✅ Yoqilgan" if config.get("maintenance_mode", False) else "❌ O'chirilgan"
+    text = (
+        f"🔧 <b>Tizim sozlamalari</b>\n\n"
+        f"🔧 Texnik ishlar rejimi: {maintenance}\n"
+        f"👥 Foydalanuvchilar: {len(users)}\n"
+        f"📦 Buyurtmalar: {len(orders)}\n"
+        f"🔄 So'nggi backup: so'nggi 24 soat ichida"
+    )
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(InlineKeyboardButton(f"🔄 Texnik ishlar rejimi ({'O''chirish' if config.get('maintenance_mode', False) else 'Yoqish'})", callback_data="toggle_maintenance"))
+    markup.add(InlineKeyboardButton("💾 Qo'lda backup yaratish", callback_data="manual_backup"))
+    markup.add(InlineKeyboardButton("📊 Ma'lumotlarni qayta yuklash", callback_data="reload_data"))
+    safe_send_message(message.chat.id, text, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda c: c.data == "toggle_maintenance")
+@safe_callback_handler
+def toggle_maintenance(c):
+    if not is_superadmin(c.from_user.id):
+        safe_answer_callback_query(c.id, "❌ Faqat super admin")
+        return
+    config["maintenance_mode"] = not config.get("maintenance_mode", False)
+    save_db()
+    status = "yoqildi" if config["maintenance_mode"] else "o'chirildi"
+    safe_answer_callback_query(c.id, f"✅ Texnik ishlar rejimi {status}")
+
+@bot.callback_query_handler(func=lambda c: c.data == "manual_backup")
+@safe_callback_handler
+def manual_backup(c):
+    if not is_admin(c.from_user.id):
+        return
+    Database.backup()
+    safe_answer_callback_query(c.id, "✅ Backup yaratildi")
+
+@bot.callback_query_handler(func=lambda c: c.data == "reload_data")
+@safe_callback_handler
+def reload_data(c):
+    if not is_superadmin(c.from_user.id):
+        safe_answer_callback_query(c.id, "❌ Faqat super admin")
+        return
+    global users, orders, config, promo_codes, ADMINS
+    users, orders, config, promo_codes, ADMINS = Database.load_all()
+    safe_answer_callback_query(c.id, "✅ Ma'lumotlar qayta yuklandi")
 
 # =====================================
-# ADMIN: BROADCAST (fully enhanced)
-# Supports: forward message, plain text, photo, video, audio/voice, document
-# Targets: all users, saved groups, saved channels, specific saved target, everything
+# ADMIN: BROADCAST
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "📢 Reklama" and is_admin(m.from_user.id))
 @admin_required
@@ -3546,7 +3760,6 @@ def send_ad(message):
     markup.add(InlineKeyboardButton("➕ Yangi kanal/guruh qo'shish", callback_data="ad_add_target"))
     markup.add(InlineKeyboardButton("📋 Saqlangan manzillar ro'yxati", callback_data="ad_list_targets"))
     safe_send_message(message.chat.id, "📢 <b>Reklama bo'limi</b>\n\nReklamani qayerga yubormoqchisiz?", reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda c: c.data == "ad_list_targets")
 @safe_callback_handler
@@ -3566,7 +3779,6 @@ def ad_list_targets(c):
     safe_answer_callback_query(c.id)
     safe_send_message(c.message.chat.id, "\n".join(lines), reply_markup=markup)
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("deltarget_"))
 @safe_callback_handler
 def deltarget(c):
@@ -3577,7 +3789,6 @@ def deltarget(c):
     save_db()
     safe_answer_callback_query(c.id, "✅ O'chirildi")
 
-
 def _prompt_ad_content(chat_id: int, target_mode: str):
     msg = safe_send_message(
         chat_id,
@@ -3587,7 +3798,6 @@ def _prompt_ad_content(chat_id: int, target_mode: str):
     if msg:
         bot.register_next_step_handler(msg, process_ad_broadcast, target_mode)
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "ad_target_users")
 @safe_callback_handler
 def ad_target_users(c):
@@ -3595,7 +3805,6 @@ def ad_target_users(c):
         return
     safe_answer_callback_query(c.id)
     _prompt_ad_content(c.message.chat.id, "users")
-
 
 @bot.callback_query_handler(func=lambda c: c.data == "ad_target_channels")
 @safe_callback_handler
@@ -3608,7 +3817,6 @@ def ad_target_channels(c):
     safe_answer_callback_query(c.id)
     _prompt_ad_content(c.message.chat.id, "channels")
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "ad_target_groups")
 @safe_callback_handler
 def ad_target_groups(c):
@@ -3620,7 +3828,6 @@ def ad_target_groups(c):
     safe_answer_callback_query(c.id)
     _prompt_ad_content(c.message.chat.id, "groups")
 
-
 @bot.callback_query_handler(func=lambda c: c.data == "ad_target_everything")
 @safe_callback_handler
 def ad_target_everything(c):
@@ -3628,7 +3835,6 @@ def ad_target_everything(c):
         return
     safe_answer_callback_query(c.id)
     _prompt_ad_content(c.message.chat.id, "everything")
-
 
 def _resolve_ad_chat_ids(target_mode: str) -> List[int]:
     targets = config.get("broadcast_targets", [])
@@ -3642,7 +3848,6 @@ def _resolve_ad_chat_ids(target_mode: str) -> List[int]:
         return [int(uid) for uid in users.keys()] + [t["id"] for t in targets]
     return []
 
-
 @safe_next_step
 def process_ad_broadcast(message, target_mode: str):
     if getattr(message, "text", None) == "⬅️ Ortga":
@@ -3652,53 +3857,77 @@ def process_ad_broadcast(message, target_mode: str):
     if not chat_ids:
         safe_send_message(message.chat.id, "❌ Yuborish uchun manzil topilmadi", reply_markup=admin_menu())
         return
+    
     safe_send_message(message.chat.id, f"⏳ Yuborilmoqda ({len(chat_ids)} ta manzilga)...")
+    
+    # Option to pin message in groups/channels
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(InlineKeyboardButton("📌 Pin qilish (guruh/kanalda)", callback_data=f"ad_pin_{target_mode}"))
+    markup.add(InlineKeyboardButton("⏩ Pin qilmasdan davom etish", callback_data=f"ad_no_pin_{target_mode}"))
+    safe_send_message(message.chat.id, "📌 Xabarni pin qilmoqchimisiz? (faqat guruh va kanallarda ishlaydi)", reply_markup=markup)
 
-    def _do_broadcast():
-        sent, failed = 0, 0
-        is_forward = message.forward_from is not None or message.forward_from_chat is not None
+@bot.callback_query_handler(func=lambda c: c.data.startswith("ad_pin_") or c.data.startswith("ad_no_pin_"))
+@safe_callback_handler
+def ad_pin_option(c):
+    if not is_admin(c.from_user.id):
+        return
+    target_mode = c.data.split("_", 2)[-1]
+    pin = c.data.startswith("ad_pin_")
+    chat_ids = _resolve_ad_chat_ids(target_mode)
+    if not chat_ids:
+        safe_answer_callback_query(c.id, "❌ Manzil topilmadi")
+        return
+    
+    safe_answer_callback_query(c.id, "✅ Yuborish boshlandi")
+    
+    def _do_broadcast_with_pin():
+        sent, failed, pinned = 0, 0, 0
+        is_forward = c.message.forward_from is not None or c.message.forward_from_chat is not None
         for cid in chat_ids:
             try:
+                sent_msg = None
                 if is_forward:
-                    bot.forward_message(cid, message.chat.id, message.message_id)
+                    sent_msg = bot.forward_message(cid, c.message.chat.id, c.message.message_id)
                 else:
-                    _forward_ad_content(message, cid)
+                    sent_msg = _forward_ad_content_safe(c.message, cid)
                 sent += 1
+                if pin and sent_msg and cid < 0:  # negative IDs are groups/channels
+                    try:
+                        bot.pin_chat_message(cid, sent_msg.message_id, disable_notification=True)
+                        pinned += 1
+                    except Exception as e:
+                        logger.debug(f"Pin qilish xato ({cid}): {e}")
             except Exception as e:
                 failed += 1
                 logger.error(f"Broadcast xato ({cid}): {e}")
-            time.sleep(0.05)  # gentle pacing to avoid Telegram flood limits
+            time.sleep(0.05)
         safe_send_message(
-            message.chat.id,
-            f"✅ Reklama yuborish tugadi\n📤 Yuborildi: {sent}\n❌ Xato: {failed}\n🎯 Manzil turi: {target_mode}",
+            c.message.chat.id,
+            f"✅ Reklama yuborish tugadi\n📤 Yuborildi: {sent}\n❌ Xato: {failed}\n📌 Pin qilindi: {pinned}\n🎯 Manzil turi: {target_mode}",
             reply_markup=admin_menu(),
         )
+    
+    threading.Thread(target=_do_broadcast_with_pin, daemon=True).start()
 
-    # Run the (potentially slow, many-recipient) broadcast in the background so
-    # the admin's UI and all other users' requests are never blocked by it.
-    threading.Thread(target=_do_broadcast, daemon=True).start()
-
-
-def _forward_ad_content(message, chat_id: int):
+def _forward_ad_content_safe(message, chat_id: int):
     if message.content_type == "text":
-        bot.send_message(chat_id, message.text)
+        return bot.send_message(chat_id, message.text)
     elif message.content_type == "photo":
-        bot.send_photo(chat_id, message.photo[-1].file_id, caption=message.caption)
+        return bot.send_photo(chat_id, message.photo[-1].file_id, caption=message.caption)
     elif message.content_type == "video":
-        bot.send_video(chat_id, message.video.file_id, caption=message.caption)
+        return bot.send_video(chat_id, message.video.file_id, caption=message.caption)
     elif message.content_type == "audio":
-        bot.send_audio(chat_id, message.audio.file_id, caption=message.caption)
+        return bot.send_audio(chat_id, message.audio.file_id, caption=message.caption)
     elif message.content_type == "voice":
-        bot.send_voice(chat_id, message.voice.file_id, caption=message.caption)
+        return bot.send_voice(chat_id, message.voice.file_id, caption=message.caption)
     elif message.content_type == "document":
-        bot.send_document(chat_id, message.document.file_id, caption=message.caption)
+        return bot.send_document(chat_id, message.document.file_id, caption=message.caption)
     elif message.content_type == "animation":
-        bot.send_animation(chat_id, message.animation.file_id, caption=message.caption)
+        return bot.send_animation(chat_id, message.animation.file_id, caption=message.caption)
     elif message.content_type == "video_note":
-        bot.send_video_note(chat_id, message.video_note.file_id)
+        return bot.send_video_note(chat_id, message.video_note.file_id)
     else:
-        bot.send_message(chat_id, "📢 Yangi e'lon")
-
+        return bot.send_message(chat_id, "📢 Yangi e'lon")
 
 @bot.callback_query_handler(func=lambda c: c.data == "ad_add_target")
 @safe_callback_handler
@@ -3708,7 +3937,6 @@ def ad_add_target(c):
     msg = safe_send_message(c.message.chat.id, "📢 Kanal/guruhdan istalgan xabarni forward qiling (bot u yerda admin bo'lishi kerak):")
     if msg:
         bot.register_next_step_handler(msg, process_ad_add_target)
-
 
 @safe_next_step
 def process_ad_add_target(message):
@@ -3723,9 +3951,8 @@ def process_ad_add_target(message):
         save_db()
     safe_send_message(message.chat.id, f"✅ Qo'shildi: {chat.title or chat.id} ({chat_type})", reply_markup=admin_menu())
 
-
 # =====================================
-# SETTINGS (enhanced, under Hisobim) / HISTORY / CONTACT
+# SETTINGS
 # =====================================
 @bot.message_handler(func=lambda m: m.text == "⚙️ Sozlamalar")
 @subscription_required
@@ -3733,7 +3960,6 @@ def settings(message):
     uid = str(message.from_user.id)
     status = "✅ Yoqilgan" if users[uid].get("notifications", True) else "❌ O'chirilgan"
     safe_send_message(message.chat.id, f"⚙️ <b>Sozlamalar</b>\n\n🔔 Bildirishnomalar: {status}", reply_markup=settings_submenu(uid))
-
 
 @bot.message_handler(func=lambda m: m.text and m.text.startswith(("🔔 Bildirishnoma", "🔕 Bildirishnoma")))
 @subscription_required
@@ -3747,12 +3973,10 @@ def toggle_notifications(message):
         reply_markup=settings_submenu(uid),
     )
 
-
 @bot.message_handler(func=lambda m: m.text == "🌐 Til sozlamalari")
 @subscription_required
 def language_settings(message):
     safe_send_message(message.chat.id, "🌐 Hozircha faqat o'zbek tili qo'llab-quvvatlanadi. Tez orada boshqa tillar qo'shiladi.", reply_markup=settings_submenu(str(message.from_user.id)))
-
 
 @bot.message_handler(func=lambda m: m.text == "📄 Mening ma'lumotlarim")
 @subscription_required
@@ -3767,11 +3991,11 @@ def my_data(message):
         f"⏱ Oxirgi faollik: {user.get('last_active')}\n"
         f"💰 Balans: {user.get('balance', 0):,} so'm\n"
         f"👥 Referallar: {user.get('referrals_count', 0)}\n"
+        f"🔰 Daraja: {get_referral_level(user.get('referrals_count', 0)).get('level')}\n"
         f"📦 Buyurtmalar: {user.get('orders_count', 0)}\n"
         f"🎮 O'ynagan o'yinlar: {user.get('games_played', 0)}"
     )
     safe_send_message(message.chat.id, text, reply_markup=settings_submenu(uid))
-
 
 @bot.message_handler(func=lambda m: m.text == "📜 Buyurtmalar tarixi")
 @subscription_required
@@ -3787,14 +4011,12 @@ def order_history(message):
         text.append(f"\n#{order.get('id')} | {order.get('kind')} | {order.get('amount', 0):,} so'm | {order.get('status')}")
     safe_send_message(message.chat.id, "\n".join(text), reply_markup=profile_submenu())
 
-
 @bot.message_handler(func=lambda m: m.text == "📩 Adminga yozish")
 @subscription_required
 def contact_admin(message):
     msg = safe_send_message(message.chat.id, "📩 Xabaringizni yozing:", reply_markup=back_menu())
     if msg:
         bot.register_next_step_handler(msg, send_to_admin)
-
 
 @safe_next_step
 def send_to_admin(message):
@@ -3814,7 +4036,6 @@ def send_to_admin(message):
             logger.error(f"Admin msg xato: {e}")
     safe_send_message(message.chat.id, "✅ Xabar yuborildi", reply_markup=profile_submenu())
 
-
 @bot.callback_query_handler(func=lambda c: c.data.startswith("reply_user_"))
 @safe_callback_handler
 def reply_user(c):
@@ -3824,7 +4045,6 @@ def reply_user(c):
     msg = safe_send_message(c.message.chat.id, f"User {uid} uchun javob yozing:")
     if msg:
         bot.register_next_step_handler(msg, lambda m: send_admin_reply(m, uid))
-
 
 @safe_next_step
 def send_admin_reply(message, user_id: str):
@@ -3837,28 +4057,21 @@ def send_admin_reply(message, user_id: str):
     except Exception as e:
         safe_send_message(message.chat.id, f"❌ Xato: {e}", reply_markup=admin_menu())
 
-
 # =====================================
 # NAVIGATION / FALLBACK
 # =====================================
 def _menu_for(user_id: int):
-    """Admins navigating user-facing flows (Pul ishlash, Hisobim, etc.) should land back
-    on the admin-as-user menu (which still has an Admin panel button), not the admin-only
-    main menu — otherwise they'd get stuck unable to reach user features again."""
     if is_admin(user_id):
         return admin_as_user_menu()
     return build_main_menu(False)
-
 
 @bot.message_handler(func=lambda m: m.text == "⬅️ Asosiy menyu")
 def to_main_menu(message):
     safe_send_message(message.chat.id, "🔙 Asosiy menyu", reply_markup=_menu_for(message.from_user.id))
 
-
 @bot.message_handler(func=lambda m: m.text == "⬅️ Ortga")
 def back(message):
     safe_send_message(message.chat.id, "🔙 Asosiy menyu", reply_markup=_menu_for(message.from_user.id))
-
 
 @bot.message_handler(func=lambda m: True, content_types=["text"])
 def unknown(message):
@@ -3870,7 +4083,6 @@ def unknown(message):
         safe_send_message(message.chat.id, "❌ Noto'g'ri buyruq. Menyudan tanlang.", reply_markup=_menu_for(message.from_user.id))
     except Exception as e:
         logger.error(f"unknown handler xato: {e}", exc_info=True)
-
 
 # =====================================
 # RUN
@@ -3891,12 +4103,10 @@ if __name__ == "__main__":
     print("=" * 50)
     logger.info("Bot ishga tushdi")
 
-    # Outer retry loop: if infinity_polling ever crashes (network drop, Telegram
-    # server hiccup, etc.) the bot restarts polling instead of dying entirely.
     while True:
         try:
             bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
-            break  # infinity_polling only returns on a clean stop
+            break
         except Exception as e:
             logger.error(f"Kritik xato, polling qayta ishga tushirilmoqda: {e}", exc_info=True)
             print(f"❌ Xato: {e}. 5 soniyadan keyin qayta urinish...")
